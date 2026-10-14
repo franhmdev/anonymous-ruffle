@@ -1,69 +1,83 @@
-import Image from "next/image";
+import Link from "next/link";
+import { getCurrentUser } from "@/lib/auth/session";
+import { listMyGroups } from "@/lib/dal";
+import { formatDate, t } from "@/lib/i18n";
 
-export default function Home() {
+export default async function HomePage() {
+  const user = await getCurrentUser();
+  if (!user) return <Landing />;
+
+  const groups = await listMyGroups(user.id);
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold">{t.dashboard.title}</h1>
+        {user.email && (
+          <Link href="/groups/new" className="btn-primary">
+            {t.dashboard.create}
+          </Link>
+        )}
+      </div>
+
+      {!user.email && (
+        <div className="card border-brand">
+          <p className="text-sm">{t.dashboard.guestNotice}</p>
+          <Link href="/account" className="btn-link mt-2 inline-block">
+            {t.dashboard.guestAction}
+          </Link>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+      )}
+
+      {groups.length === 0 ? (
+        <p className="card text-muted">{t.dashboard.empty}</p>
+      ) : (
+        <ul className="space-y-3">
+          {groups.map((group) => (
+            <li key={group.id}>
+              <Link href={`/groups/${group.id}`} className="card block hover:border-brand">
+                <div className="flex items-start justify-between gap-2">
+                  <span className="text-lg font-semibold">{group.name}</span>
+                  <span
+                    className={`badge ${group.status === "drawn" ? "bg-accent/15 text-accent" : "bg-brand-soft text-brand"}`}
+                  >
+                    {group.status === "drawn" ? t.dashboard.drawn : t.dashboard.draft}
+                  </span>
+                </div>
+                <p className="mt-1 text-sm text-muted">
+                  {formatDate(group.deliveryDate)}
+                  {group.adminId === user.id && ` · ${t.dashboard.admin}`}
+                </p>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function Landing() {
+  return (
+    <div className="space-y-8 py-6 text-center">
+      <div className="text-6xl" aria-hidden="true">
+        🎁
+      </div>
+      <h1 className="text-3xl font-bold text-balance">{t.landing.title}</h1>
+      <p className="mx-auto max-w-md text-lg text-muted text-balance">{t.landing.subtitle}</p>
+      <Link href="/login" className="btn-primary px-8 text-lg">
+        {t.landing.cta}
+      </Link>
+      <ul className="mx-auto grid max-w-md gap-2 text-left">
+        {t.landing.features.map((feature) => (
+          <li key={feature} className="card flex items-center gap-3 py-3">
+            <span aria-hidden="true" className="text-accent">
+              ✓
+            </span>
+            {feature}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
