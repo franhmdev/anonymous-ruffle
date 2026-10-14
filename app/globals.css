@@ -1,26 +1,78 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #faf7f2;
+  --foreground: #1f2937;
+  --surface: #ffffff;
+  --muted: #6b7280;
+  --border: #e7e1d8;
+  --brand: #b91c1c;
+  --brand-strong: #991b1b;
+  --brand-soft: #fee2e2;
+  --accent: #166534;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #14110f;
+    --foreground: #f3f4f6;
+    --surface: #1f1b18;
+    --muted: #a8a29e;
+    --border: #3a332d;
+    --brand: #f87171;
+    --brand-strong: #fca5a5;
+    --brand-soft: #3b1515;
+    --accent: #4ade80;
+  }
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-brand: var(--brand);
+  --color-brand-strong: var(--brand-strong);
+  --color-brand-soft: var(--brand-soft);
+  --color-accent: var(--accent);
   --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@utility btn {
+  @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 py-2 text-base font-semibold transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-60;
+}
+@utility btn-primary {
+  @apply btn bg-brand text-white hover:bg-brand-strong dark:text-black;
+}
+@utility btn-secondary {
+  @apply btn border border-border bg-surface text-foreground hover:bg-brand-soft;
+}
+@utility btn-danger {
+  @apply btn border border-brand bg-transparent text-brand hover:bg-brand-soft;
+}
+@utility btn-link {
+  @apply font-semibold text-brand underline underline-offset-4 hover:text-brand-strong;
+}
+@utility card {
+  @apply rounded-2xl border border-border bg-surface p-4 shadow-sm sm:p-5;
+}
+@utility label {
+  @apply mb-1 block text-sm font-semibold;
+}
+@utility input {
+  @apply block min-h-11 w-full rounded-xl border border-border bg-surface px-3 py-2 text-base text-foreground placeholder:text-muted focus:border-brand focus:outline-2 focus:outline-brand/40;
+}
+@utility hint {
+  @apply mt-1 text-sm text-muted;
+}
+@utility badge {
+  @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold;
 }

@@ -1,0 +1,15 @@
+# Local development database. Production uses a managed PostgreSQL in an EU region.
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: amigo
+      POSTGRES_PASSWORD: amigo
+      POSTGRES_DB: amigo_invisible
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
