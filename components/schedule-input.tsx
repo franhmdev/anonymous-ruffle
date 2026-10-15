@@ -19,6 +19,7 @@ export function ScheduleInput() {
       </label>
       <input
         id="scheduledAtLocal"
+        name="scheduledAtLocal"
         type="datetime-local"
         required
         className="input"
