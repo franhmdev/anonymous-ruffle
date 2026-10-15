@@ -14,7 +14,8 @@
     "test:e2e": "playwright test",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "icons": "node scripts/generate-icons.mjs"
+    "icons": "node scripts/generate-icons.mjs",
+    "email:check": "node --env-file=.env.smtp.local scripts/check-email.mjs"
   },
   "dependencies": {
     "@serwist/next": "^9.5.13",

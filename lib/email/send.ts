@@ -32,10 +32,15 @@ function transport(): Transport | null {
 
   if (env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASSWORD) {
     const smtp: Transporter = nodemailer.createTransport({
-      host: env.SMTP_HOST,
+      host: env.SMTP_HOST.trim(),
       port: env.SMTP_PORT,
       secure: env.SMTP_PORT === 465,
-      auth: { user: env.SMTP_USER, pass: env.SMTP_PASSWORD },
+      // Google shows app passwords in groups ("abcd efgh …"); the spaces are not part of it.
+      auth: { user: env.SMTP_USER.trim(), pass: env.SMTP_PASSWORD.replace(/\s+/g, "") },
+      // Fail fast instead of hanging the serverless function.
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 20_000,
     });
     cachedTransport = {
       name: "smtp",
@@ -65,6 +70,13 @@ function transport(): Transport | null {
     cachedTransport = null;
   }
   return cachedTransport;
+}
+
+/** Error text plus the SMTP/Node codes that explain it (EAUTH, ETIMEDOUT, 535…), without secrets. */
+function describeError(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+  const { code, responseCode } = error as Error & { code?: string; responseCode?: number };
+  return [code, responseCode, error.message].filter(Boolean).join(" ");
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -107,7 +119,7 @@ export async function sendEmail(message: EmailMessage): Promise<boolean> {
         transport: active.name,
         attempt,
         to: maskEmail(message.to),
-        error: error instanceof Error ? error.message : String(error),
+        error: describeError(error),
       });
     }
     if (attempt < MAX_ATTEMPTS) await sleep(BASE_DELAY_MS * 3 ** (attempt - 1));

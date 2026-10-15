@@ -197,7 +197,7 @@ Borrados en cascada desde `users`, `groups` y `participants`. Migraciones: `0000
 
 - **Vercel** (plan gratuito): importado desde GitHub, `vercel.json` con `regions: ["fra1"]` y cron diario `0 7 * * *`. Build: `npm run build` (= `next build && serwist build serwist.config.mjs`). Las variables de entorno solo se aplican tras **Redeploy**.
 - **Supabase** (`eu-west-1`): en Vercel `DATABASE_URL` = **Transaction pooler** (puerto 6543) con **`?max=1`** (tamaño del pool leído de la URL; `prepare: false` obligatorio con el pooler). La conexión directa `db.<ref>.supabase.co` es solo IPv6. Migraciones desde local con `node --env-file=.env.production.local node_modules/drizzle-kit/bin.cjs migrate`. Contraseñas con caracteres especiales deben ir codificadas en la URL.
-- **Email en producción: Gmail SMTP** (`smtp.gmail.com:465`, contraseña de aplicación, ~500 destinatarios/día, `EMAIL_FROM` = la dirección de Gmail). Resend sin dominio verificado solo entrega al dueño de la cuenta; si se compra un dominio, volver a Resend.
+- **Email en producción: Gmail SMTP** (`smtp.gmail.com:465`, contraseña de aplicación —se le quitan los espacios con los que Google la muestra—, timeouts cortos y logs con el código de error, ~500 destinatarios/día, `EMAIL_FROM` = la dirección de Gmail). Resend sin dominio verificado solo entrega al dueño de la cuenta; si se compra un dominio, volver a Resend.
 - El cliente de BD y las variables de entorno se cargan **de forma perezosa** para que `next build` no necesite secretos.
 
 ## Variables de entorno (`.env.example` sin valores reales)
@@ -212,7 +212,7 @@ Borrados en cascada desde `users`, `groups` y `participants`. Migraciones: `0000
 - `APP_URL` (sin barra final; base de los enlaces de invitación y acceso)
 - Solo desarrollo/tests: `DEV_OUTBOX_FILE` (el mailer de desarrollo escribe ahí los emails para que los e2e lean los códigos).
 
-Archivos locales ignorados por git: `.env.local` (desarrollo), `.env.production.local` (migrar Supabase), `.env.vercel.local` (valores para pegar en Vercel). Sin transporte de email configurado, en desarrollo los emails se imprimen en consola.
+Archivos locales ignorados por git: `.env.local` (desarrollo), `.env.production.local` (migrar Supabase), `.env.vercel.local` (valores para pegar en Vercel), `.env.smtp.local` (probar el SMTP). Sin transporte de email configurado, en desarrollo los emails se imprimen en consola.
 
 ## Comandos
 
@@ -224,6 +224,7 @@ Archivos locales ignorados por git: `.env.local` (desarrollo), `.env.production.
 - `npm run test:e2e` — Playwright en Pixel 7 e iPhone 15 contra el dev server (limpia `rate_limits` antes de cada ejecución local)
 - `npm run db:generate` / `npm run db:migrate` — migraciones
 - `npm run icons` — regenera los PNG
+- `npm run email:check [destino]` — comprueba el SMTP con los valores de `.env.smtp.local` (inicia sesión y, si se indica destino, envía un email de prueba); muestra el código de error (`EAUTH`, `ETIMEDOUT`…) sin imprimir secretos
 - `docker compose up -d` — PostgreSQL 17 local (`amigo/amigo@localhost:5432/amigo_invisible`)
 
 ## Decisiones tomadas (y por qué)
