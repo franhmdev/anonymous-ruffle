@@ -193,6 +193,7 @@ export const es = {
     nowConfirm: "Se asignará a cada persona a quién regala y se enviará el resultado por email.",
     schedule: "Programar sorteo",
     scheduleAt: "Fecha y hora",
+    scheduleHint: "El sorteo se hará en cuanto alguien abra el grupo después de esa hora y, como tarde, en la revisión automática diaria.",
     scheduleSave: "Programar",
     scheduleCancel: "Cancelar programación",
     scheduled: "Sorteo programado.",

@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { LocalDateTime } from "@/components/local-date-time";
 import { InstallSuggestion } from "@/components/pwa/install-prompt";
 import { requireGroupMember } from "@/lib/dal";
-import { drawFailureMessage, type DrawFailureReason } from "@/lib/draw/service";
+import { drawFailureMessage, runScheduledDraw, type DrawFailureReason } from "@/lib/draw/service";
 import { format, formatBudget, formatDate, t } from "@/lib/i18n";
 import { AdminPanel } from "./_sections/admin-panel";
 import { MemberList } from "./_sections/member-list";
@@ -18,6 +19,13 @@ export default async function GroupPage({ params, searchParams }: PageProps<"/gr
   const { welcome } = await searchParams;
   const ctx = await requireGroupMember(id);
   const { group, me, isAdmin } = ctx;
+
+  // The cron only runs daily on the free plan: run a due scheduled draw on the
+  // first visit after its time, then reload with the fresh state.
+  if (group.status === "draft" && group.scheduledDrawAt && group.scheduledDrawAt.getTime() <= Date.now()) {
+    await runScheduledDraw(group.id);
+    redirect(`/groups/${group.id}`);
+  }
   const admin = await db.query.users.findFirst({ where: eq(users.id, group.adminId), columns: { name: true } });
   const isDrawn = group.status === "drawn";
   const participates = me?.status === "accepted";

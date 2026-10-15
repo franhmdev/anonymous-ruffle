@@ -25,6 +25,7 @@ export function ScheduleInput() {
         value={local}
         onChange={(event) => setLocal(event.target.value)}
       />
+      <p className="hint">{t.draw.scheduleHint}</p>
       <input type="hidden" name="scheduledAt" value={iso} />
       <TimeZoneInput />
     </div>

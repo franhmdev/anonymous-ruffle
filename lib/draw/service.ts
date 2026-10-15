@@ -173,16 +173,26 @@ export async function runScheduledDraws(): Promise<{ drawn: number; failed: numb
   let drawn = 0;
   let failed = 0;
   for (const { id } of due) {
-    const outcome = await performDraw(id, "scheduled");
-    if (outcome.ok) {
-      drawn++;
-      await notifyDrawCompleted(id);
-    } else if (outcome.reason === "impossible" || outcome.reason === "not_enough_participants") {
-      failed++;
-      await notifyAdminScheduledDrawFailed(id, outcome.reason);
-    }
+    const outcome = await runScheduledDraw(id);
+    if (outcome.ok) drawn++;
+    else if (outcome.reason === "impossible" || outcome.reason === "not_enough_participants") failed++;
   }
   return { drawn, failed };
+}
+
+/**
+ * Runs one group's scheduled draw if it is due and sends the notifications.
+ * Used by the cron and when someone opens the group after the scheduled time
+ * (the free hosting plan only runs the cron once a day). Idempotent.
+ */
+export async function runScheduledDraw(groupId: string): Promise<DrawOutcome> {
+  const outcome = await performDraw(groupId, "scheduled");
+  if (outcome.ok) {
+    await notifyDrawCompleted(groupId);
+  } else if (outcome.reason === "impossible" || outcome.reason === "not_enough_participants") {
+    await notifyAdminScheduledDrawFailed(groupId, outcome.reason);
+  }
+  return outcome;
 }
 
 async function notifyAdminScheduledDrawFailed(groupId: string, reason: DrawFailureReason): Promise<void> {

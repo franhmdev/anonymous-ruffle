@@ -44,5 +44,5 @@ Claves VAPID para las notificaciones push: `npx web-push generate-vapid-keys`.
 - **Crear grupos** requiere email verificado; los invitados pueden unirse con solo su nombre y vincular su email después (si el email ya existía, se fusionan las cuentas).
 - **Exclusiones** simétricas. Para cambiar participantes o exclusiones tras el sorteo se reabre el grupo (anula el sorteo y avisa a todos).
 - **Rate limiting** en PostgreSQL (tabla `rate_limits`), compartido entre instancias serverless.
-- El cron de `vercel.json` corre cada 10 minutos (requiere plan Pro de Vercel; en Hobby solo es diario).
+- **Sorteos programados**: el cron de `vercel.json` corre una vez al día (límite del plan gratuito de Vercel). Además, un sorteo vencido se ejecuta en cuanto alguien abre el grupo. Con plan Pro se puede subir la frecuencia (p. ej. `*/10 * * * *`).
 - `public/offline.html` es estático y no usa el catálogo de textos.
