@@ -12,7 +12,7 @@ npm run db:migrate
 npm run dev                     # http://localhost:3000
 ```
 
-Sin `RESEND_API_KEY`, en desarrollo los emails (incluidos los códigos de acceso) se imprimen en la consola del servidor.
+Sin proveedor de email configurado, en desarrollo los emails (incluidos los códigos de acceso) se imprimen en la consola del servidor.
 
 Claves VAPID para las notificaciones push: `npx web-push generate-vapid-keys`.
 
@@ -45,4 +45,5 @@ Claves VAPID para las notificaciones push: `npx web-push generate-vapid-keys`.
 - **Exclusiones** simétricas. Para cambiar participantes o exclusiones tras el sorteo se reabre el grupo (anula el sorteo y avisa a todos).
 - **Rate limiting** en PostgreSQL (tabla `rate_limits`), compartido entre instancias serverless.
 - **Sorteos programados**: el cron de `vercel.json` corre una vez al día (límite del plan gratuito de Vercel). Además, un sorteo vencido se ejecuta en cuanto alguien abre el grupo. Con plan Pro se puede subir la frecuencia (p. ej. `*/10 * * * *`).
+- **Emails**: por SMTP (`SMTP_*`, p. ej. Gmail con contraseña de aplicación, límite de ~500 destinatarios/día) o por Resend (`RESEND_API_KEY`, requiere dominio verificado para escribir a cualquiera). Si ambos están configurados, se usa SMTP.
 - `public/offline.html` es estático y no usa el catálogo de textos.

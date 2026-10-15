@@ -3,6 +3,11 @@ import { z } from "zod";
 const schema = z.object({
   DATABASE_URL: z.string().min(1),
   SESSION_SECRET: z.string().min(32, "SESSION_SECRET must be at least 32 characters"),
+  // SMTP (e.g. Gmail: smtp.gmail.com, port 465, an app password). Takes precedence over Resend.
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().int().default(465),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASSWORD: z.string().optional(),
   RESEND_API_KEY: z.string().optional(),
   EMAIL_FROM: z.string().default("Amigo Invisible <no-reply@example.com>"),
   VAPID_PUBLIC_KEY: z.string().optional(),

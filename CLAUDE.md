@@ -23,7 +23,7 @@ Aplicación **PWA (Progressive Web App)** para organizar sorteos de amigo invisi
 | Base de datos | PostgreSQL (región UE) | Datos muy relacionales: grupos, exclusiones, asignaciones |
 | ORM | Drizzle ORM | Tipado y migraciones sencillas |
 | Validación | Zod | Validar entradas en servidor y cliente |
-| Emails | Resend (región UE) | Emails transaccionales; alternativa: Amazon SES `eu-west` |
+| Emails | SMTP con `nodemailer` (ahora Gmail con contraseña de aplicación) o Resend (región UE) | Sin dominio propio, Resend solo envía al dueño de la cuenta; con dominio, volver a Resend |
 | Tareas programadas | Cron del hosting que llama a un endpoint protegido (p. ej. Vercel Cron) | Para los sorteos con fecha; sin servidor propio |
 | Notificaciones push | Web Push (VAPID) con la librería `web-push` | Estándar PWA; complementa al email, no lo sustituye |
 | Tests | Vitest (unitarios) + Playwright (e2e, emulando móvil) | |
@@ -164,6 +164,7 @@ Mantener estos scripts en `package.json` y actualizarlos aquí cuando existan:
 
 - `DATABASE_URL`
 - `SESSION_SECRET`
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD` (envío por SMTP, p. ej. Gmail)
 - `RESEND_API_KEY` y `EMAIL_FROM`
 - `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` y `VAPID_SUBJECT`
 - `CRON_SECRET`
