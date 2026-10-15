@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { PageShell } from "@/components/page-shell";
 import { redirect } from "next/navigation";
 import { ActionForm } from "@/components/action-form";
 import { SubmitButton } from "@/components/submit-button";
@@ -16,13 +17,12 @@ export default async function MagicLinkPage({ searchParams }: PageProps<"/auth/v
   if (typeof token !== "string" || !token) redirect("/login");
 
   return (
-    <div className="mx-auto max-w-md space-y-4 text-center">
-      <h1 className="text-2xl font-bold">{t.auth.loginTitle}</h1>
+    <PageShell back="/" title={t.auth.loginTitle}>
       <ActionForm action={verifyLinkAction} className="card space-y-4">
         <input type="hidden" name="token" value={token} />
         <input type="hidden" name="next" value={typeof next === "string" ? next : "/"} />
         <SubmitButton className="w-full">{t.auth.verify}</SubmitButton>
       </ActionForm>
-    </div>
+    </PageShell>
   );
 }

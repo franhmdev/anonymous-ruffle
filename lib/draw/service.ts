@@ -195,6 +195,17 @@ export async function runScheduledDraw(groupId: string): Promise<DrawOutcome> {
   return outcome;
 }
 
+/** Runs the group's scheduled draw when its time has passed. Returns true if anything was attempted. */
+export async function runScheduledDrawIfDue(group: {
+  id: string;
+  status: "draft" | "drawn";
+  scheduledDrawAt: Date | null;
+}): Promise<boolean> {
+  if (group.status !== "draft" || !group.scheduledDrawAt || group.scheduledDrawAt.getTime() > Date.now()) return false;
+  await runScheduledDraw(group.id);
+  return true;
+}
+
 async function notifyAdminScheduledDrawFailed(groupId: string, reason: DrawFailureReason): Promise<void> {
   const [row] = await db
     .select({ groupName: groups.name, adminEmail: users.email })

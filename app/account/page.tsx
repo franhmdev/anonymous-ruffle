@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import Link from "next/link";
+import { PageShell } from "@/components/page-shell";
 import { ActionForm } from "@/components/action-form";
 import { ConfirmSubmit } from "@/components/confirm-submit";
 import { LogoutForm } from "@/components/logout-form";
@@ -23,9 +25,7 @@ export default async function AccountPage() {
   const vapidPublicKey = isPushConfigured() ? (env.VAPID_PUBLIC_KEY ?? null) : null;
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold">{t.account.title}</h1>
-
+    <PageShell back="/" title={t.account.title}>
       <section className="card space-y-4" aria-labelledby="profile">
         <h2 id="profile" className="text-lg font-bold">
           {t.account.profile}
@@ -46,7 +46,7 @@ export default async function AccountPage() {
       </section>
 
       {!user.email && (
-        <section className="card space-y-3 border-brand" aria-labelledby="link-email">
+        <section className="card space-y-3 border-2 border-warn-border bg-warn-soft" aria-labelledby="link-email">
           <h2 id="link-email" className="text-lg font-bold">
             {t.account.linkEmailTitle}
           </h2>
@@ -79,7 +79,7 @@ export default async function AccountPage() {
       </section>
 
       <section className="card space-y-3" aria-labelledby="danger">
-        <h2 id="danger" className="text-lg font-bold text-brand">
+        <h2 id="danger" className="text-lg font-bold text-danger">
           {t.account.dangerTitle}
         </h2>
         <p className="text-sm">{t.account.dangerIntro}</p>
@@ -87,6 +87,11 @@ export default async function AccountPage() {
           <ConfirmSubmit warning={t.account.deleteConfirm}>{t.account.deleteAccount}</ConfirmSubmit>
         </ActionForm>
       </section>
-    </div>
+      <p className="text-center">
+        <Link href="/privacy" className="btn-link">
+          {t.nav.privacy}
+        </Link>
+      </p>
+    </PageShell>
   );
 }

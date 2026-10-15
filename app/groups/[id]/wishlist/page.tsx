@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { wishlistItems } from "@/db/schema";
 import { ActionForm } from "@/components/action-form";
+import { PageShell } from "@/components/page-shell";
 import { SubmitButton } from "@/components/submit-button";
 import { WishlistItems } from "@/components/wishlist-items";
 import { requireGroupMember } from "@/lib/dal";
@@ -24,14 +24,8 @@ export default async function WishlistPage({ params }: PageProps<"/groups/[id]/w
     : [];
 
   return (
-    <div className="space-y-6">
-      <Link href={`/groups/${group.id}`} className="btn-link text-sm">
-        ← {group.name}
-      </Link>
-      <div>
-        <h1 className="text-2xl font-bold">{t.wishlist.title}</h1>
-        <p className="mt-1 text-muted">{t.wishlist.intro}</p>
-      </div>
+    <PageShell back={`/groups/${group.id}`} title={t.wishlist.title}>
+      <p className="font-semibold text-muted">{t.wishlist.intro}</p>
 
       <section className="card">
         <WishlistItems
@@ -69,6 +63,6 @@ export default async function WishlistPage({ params }: PageProps<"/groups/[id]/w
           <SubmitButton>{t.wishlist.add}</SubmitButton>
         </ActionForm>
       )}
-    </div>
+    </PageShell>
   );
 }

@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { eq } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { notFound } from "next/navigation";
@@ -7,6 +6,7 @@ import { db } from "@/db";
 import { assignments, participants } from "@/db/schema";
 import { ActionForm } from "@/components/action-form";
 import { ConfirmSubmit } from "@/components/confirm-submit";
+import { PageShell } from "@/components/page-shell";
 import { requireGroupAdmin } from "@/lib/dal";
 import { t } from "@/lib/i18n";
 import { canViewAllResults } from "@/lib/permissions";
@@ -20,33 +20,27 @@ export default async function ResultsPage({ params }: PageProps<"/groups/[id]/re
   const access = canViewAllResults(group, user.id, me);
   if (access === "forbidden") notFound();
 
-  const back = (
-    <Link href={`/groups/${group.id}`} className="btn-link text-sm">
-      ← {t.common.back}
-    </Link>
-  );
+  const back = `/groups/${group.id}`;
 
   if (access === "not_drawn") {
     return (
-      <div className="space-y-4">
-        {back}
-        <p className="card">{t.results.notDrawn}</p>
-      </div>
+      <PageShell back={back} title={t.results.title}>
+        <p className="card font-semibold">{t.results.notDrawn}</p>
+      </PageShell>
     );
   }
 
   if (access === "needs_surprise_confirmation") {
     return (
-      <div className="space-y-4">
-        {back}
-        <section className="card space-y-3 border-brand">
-          <h1 className="text-xl font-bold">{t.results.surpriseTitle}</h1>
-          <p>{t.results.surpriseWarning}</p>
+      <PageShell back={back} title={t.results.title}>
+        <section className="card space-y-3 border-2 border-warn-border bg-warn-soft">
+          <h2 className="text-xl font-black text-warn">{t.results.surpriseTitle}</h2>
+          <p className="font-semibold">{t.results.surpriseWarning}</p>
           <ActionForm action={revealSurpriseAction.bind(null, group.id)}>
             <ConfirmSubmit warning={t.results.surpriseWarning}>{t.results.surpriseConfirm}</ConfirmSubmit>
           </ActionForm>
         </section>
-      </div>
+      </PageShell>
     );
   }
 
@@ -61,17 +55,15 @@ export default async function ResultsPage({ params }: PageProps<"/groups/[id]/re
     .orderBy(giver.name);
 
   return (
-    <div className="space-y-4">
-      {back}
-      <h1 className="text-2xl font-bold">{t.results.title}</h1>
+    <PageShell back={back} title={t.results.title}>
       <div className="card overflow-x-auto p-0">
         <table className="w-full text-left">
-          <thead className="border-b border-border text-sm text-muted">
+          <thead className="border-b border-border text-sm font-extrabold text-muted">
             <tr>
-              <th scope="col" className="px-4 py-3">
+              <th scope="col" className="px-5 py-3">
                 {t.results.giver}
               </th>
-              <th scope="col" className="px-4 py-3">
+              <th scope="col" className="px-5 py-3">
                 {t.results.receiver}
               </th>
             </tr>
@@ -79,13 +71,13 @@ export default async function ResultsPage({ params }: PageProps<"/groups/[id]/re
           <tbody className="divide-y divide-border">
             {rows.map((row) => (
               <tr key={row.id}>
-                <td className="px-4 py-3 font-semibold">{row.giver}</td>
-                <td className="px-4 py-3">🎁 {row.receiver}</td>
+                <td className="px-5 py-4 text-lg font-black">{row.giver}</td>
+                <td className="px-5 py-4 text-lg font-bold text-primary">🎁 {row.receiver}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-    </div>
+    </PageShell>
   );
 }

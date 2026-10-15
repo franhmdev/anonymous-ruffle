@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { participants } from "@/db/schema";
+import { UserIcon } from "@/components/icons";
 import { t } from "@/lib/i18n";
 
 /** Accepted participants' names, as seen by a regular member. */
@@ -12,13 +13,14 @@ export async function MemberList({ groupId }: { groupId: string }) {
   });
 
   return (
-    <section className="card" aria-labelledby="members-title">
-      <h2 id="members-title" className="mb-3 text-lg font-bold">
-        {t.participants.title} ({members.length})
+    <section aria-labelledby="members-title" className="-mx-5">
+      <h2 id="members-title" className="mb-3 px-5 text-2xl font-black">
+        {t.participants.title} <span className="text-muted">({members.length})</span>
       </h2>
-      <ul className="flex flex-wrap gap-2">
+      <ul className="divide-y divide-border border-y border-border bg-surface/60">
         {members.map((member) => (
-          <li key={member.id} className="badge bg-background px-3 py-1 text-sm">
+          <li key={member.id} className="flex items-center gap-3 px-5 py-4 text-xl font-black">
+            <UserIcon className="text-muted" size={22} />
             {member.name}
           </li>
         ))}

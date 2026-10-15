@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ActionForm } from "@/components/action-form";
 import { GroupFields } from "@/components/group-fields";
+import { PageShell } from "@/components/page-shell";
 import { SubmitButton } from "@/components/submit-button";
 import { requireUser } from "@/lib/auth/session";
 import { t } from "@/lib/i18n";
@@ -14,33 +15,34 @@ export default async function NewGroupPage() {
 
   if (!user.email) {
     return (
-      <div className="card space-y-3">
-        <p>{t.dashboard.needsEmailToCreate}</p>
-        <Link href="/account" className="btn-primary">
-          {t.dashboard.guestAction}
-        </Link>
-      </div>
+      <PageShell back="/" title={t.groups.newTitle}>
+        <div className="card space-y-3">
+          <p className="font-semibold">{t.dashboard.needsEmailToCreate}</p>
+          <Link href="/account" className="btn-primary w-full">
+            {t.dashboard.guestAction}
+          </Link>
+        </div>
+      </PageShell>
     );
   }
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-2xl font-bold">{t.groups.newTitle}</h1>
+    <PageShell back="/" title={t.groups.newTitle}>
       <ActionForm action={createGroupAction} className="card space-y-4">
         <GroupFields />
         <label className="flex items-start gap-3">
-          <input type="checkbox" name="adminParticipates" defaultChecked className="mt-1 size-5 accent-brand" />
-          <span className="font-semibold">{t.groups.adminParticipates}</span>
+          <input type="checkbox" name="adminParticipates" defaultChecked className="mt-1 size-5 accent-primary" />
+          <span className="font-extrabold">{t.groups.adminParticipates}</span>
         </label>
         <label className="flex items-start gap-3">
-          <input type="checkbox" name="surpriseMode" className="mt-1 size-5 accent-brand" />
+          <input type="checkbox" name="surpriseMode" className="mt-1 size-5 accent-primary" />
           <span>
-            <span className="font-semibold">{t.groups.surpriseMode}</span>
+            <span className="font-extrabold">{t.groups.surpriseMode}</span>
             <span className="hint block">{t.groups.surpriseModeHint}</span>
           </span>
         </label>
         <SubmitButton className="w-full">{t.groups.create}</SubmitButton>
       </ActionForm>
-    </div>
+    </PageShell>
   );
 }

@@ -6,9 +6,9 @@ import { deflateSync } from "node:zlib";
 const OUT = new URL("../public/icons/", import.meta.url);
 mkdirSync(OUT, { recursive: true });
 
-const BRAND = [185, 28, 28, 255];
+const BRAND = [108, 142, 245, 255];
 const WHITE = [255, 255, 255, 255];
-const GOLD = [250, 204, 21, 255];
+const GOLD = [245, 196, 67, 255];
 const TRANSPARENT = [0, 0, 0, 0];
 
 /** Gift shape in a unit square (0..1). Returns a color or null. */

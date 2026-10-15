@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { PageShell } from "@/components/page-shell";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ActionForm } from "@/components/action-form";
@@ -14,9 +15,8 @@ export default async function VerifyCodePage({ searchParams }: PageProps<"/login
   const nextPath = typeof next === "string" ? next : "/";
 
   return (
-    <div className="mx-auto max-w-md space-y-4">
-      <h1 className="text-2xl font-bold">{t.auth.verifyTitle}</h1>
-      <p className="text-muted">{format(t.auth.verifyIntro, { email })}</p>
+    <PageShell back="/login" title={t.auth.verifyTitle}>
+      <p className="font-semibold text-muted">{format(t.auth.verifyIntro, { email })}</p>
       <ActionForm action={verifyCodeAction} className="card space-y-4">
         <input type="hidden" name="email" value={email} />
         <input type="hidden" name="next" value={nextPath} />
@@ -43,6 +43,6 @@ export default async function VerifyCodePage({ searchParams }: PageProps<"/login
       <Link href={`/login?${new URLSearchParams({ email, next: nextPath })}`} className="btn-link text-sm">
         {t.auth.resend}
       </Link>
-    </div>
+    </PageShell>
   );
 }

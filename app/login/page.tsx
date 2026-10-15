@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { PageShell } from "@/components/page-shell";
 import { ActionForm } from "@/components/action-form";
 import { SubmitButton } from "@/components/submit-button";
 import { t } from "@/lib/i18n";
@@ -10,9 +11,8 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   const { next, email } = await searchParams;
 
   return (
-    <div className="mx-auto max-w-md space-y-4">
-      <h1 className="text-2xl font-bold">{t.auth.loginTitle}</h1>
-      <p className="text-muted">{t.auth.loginIntro}</p>
+    <PageShell back="/" title={t.auth.loginTitle}>
+      <p className="font-semibold text-muted">{t.auth.loginIntro}</p>
       <ActionForm action={requestCodeAction} className="card space-y-4">
         <input type="hidden" name="next" value={typeof next === "string" ? next : "/"} />
         <div>
@@ -39,6 +39,6 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
         </div>
         <SubmitButton className="w-full">{t.auth.sendCode}</SubmitButton>
       </ActionForm>
-    </div>
+    </PageShell>
   );
 }

@@ -114,8 +114,8 @@ export function InstallSuggestion() {
   if (mode === "hidden") return null;
 
   return (
-    <aside className="card border-brand" aria-labelledby="install-title">
-      <h2 id="install-title" className="text-lg font-bold">
+    <aside className="card border-2 border-brand-soft" aria-labelledby="install-title">
+      <h2 id="install-title" className="text-lg font-black">
         {t.pwa.installTitle}
       </h2>
       <p className="mt-1 text-sm">{mode === "ios" ? t.pwa.iosInstall : t.pwa.installBody}</p>

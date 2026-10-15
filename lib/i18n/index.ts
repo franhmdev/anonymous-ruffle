@@ -31,3 +31,11 @@ export function formatDateTime(date: Date, timeZone: string): string {
     timeZoneName: "short",
   }).format(date);
 }
+
+/** Compact calendar day, e.g. "24 dic 2026". */
+export function formatShortDate(isoDate: string | null): string {
+  if (!isoDate) return t.common.noDate;
+  return new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" })
+    .format(new Date(`${isoDate}T00:00:00Z`))
+    .replace(".", "");
+}

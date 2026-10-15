@@ -9,15 +9,16 @@ type Props = {
   children: ReactNode;
   /** Warning shown before the action is confirmed. */
   warning: string;
-  variant?: "primary" | "secondary" | "danger";
+  variant?: "primary" | "secondary" | "danger" | "blue";
   offlineMessage?: string;
+  fullWidth?: boolean;
 };
 
 /**
  * Two-step submit button for destructive actions. Sends `confirm=yes`, which
  * the server also checks, so the warning cannot be skipped.
  */
-export function ConfirmSubmit({ children, warning, variant = "danger", offlineMessage }: Props) {
+export function ConfirmSubmit({ children, warning, variant = "danger", offlineMessage, fullWidth }: Props) {
   const [asking, setAsking] = useState(false);
   const { pending } = useFormStatus();
   const [wasPending, setWasPending] = useState(false);
@@ -30,21 +31,25 @@ export function ConfirmSubmit({ children, warning, variant = "danger", offlineMe
 
   if (!asking) {
     return (
-      <button type="button" className={`btn-${variant}`} onClick={() => setAsking(true)}>
+      <button
+        type="button"
+        className={`btn-${variant} ${fullWidth ? "w-full text-lg" : ""}`}
+        onClick={() => setAsking(true)}
+      >
         {children}
       </button>
     );
   }
 
   return (
-    <div role="alertdialog" aria-label={warning} className="rounded-xl border border-brand bg-brand-soft p-3">
-      <p className="mb-3 text-sm font-medium">{warning}</p>
+    <div role="alertdialog" aria-label={warning} className="rounded-2xl border-2 border-danger/30 bg-danger-soft p-4">
+      <p className="mb-3 font-bold text-danger">{warning}</p>
       <input type="hidden" name="confirm" value="yes" />
       <div className="flex flex-wrap gap-2">
         <SubmitButton variant={variant === "danger" ? "danger" : "primary"} offlineMessage={offlineMessage}>
           {t.common.confirm}
         </SubmitButton>
-        <button type="button" className="btn-secondary" onClick={() => setAsking(false)}>
+        <button type="button" className="btn-outline" onClick={() => setAsking(false)}>
           {t.common.cancel}
         </button>
       </div>

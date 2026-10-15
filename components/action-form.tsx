@@ -12,15 +12,19 @@ type Props = {
   onSuccess?: (state: FormState) => void;
 };
 
+export const ACTION_SUCCESS_EVENT = "action-success";
+
 /** Form wired to a Server Action that shows its error or success message accessibly. */
 export function ActionForm({ action, children, className, resetOnSuccess, onSuccess }: Props) {
   const [state, formAction] = useActionState(action, null);
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
-    if (state?.success !== undefined || state?.data) {
+    if (state && !state.error) {
       if (resetOnSuccess) formRef.current?.reset();
       onSuccess?.(state);
+      // Lets containers such as BottomSheet react (e.g. close) without coupling.
+      formRef.current?.dispatchEvent(new CustomEvent(ACTION_SUCCESS_EVENT, { bubbles: true }));
     }
   }, [state, resetOnSuccess, onSuccess]);
 
@@ -35,11 +39,11 @@ export function ActionForm({ action, children, className, resetOnSuccess, onSucc
 export function FormMessage({ state }: { state: FormState }) {
   if (!state?.error && !state?.success) return null;
   return state.error ? (
-    <p role="alert" className="mt-3 rounded-lg bg-brand-soft px-3 py-2 text-sm font-medium text-brand">
+    <p role="alert" className="mt-3 rounded-2xl bg-danger-soft px-4 py-3 text-sm font-bold text-danger">
       {state.error}
     </p>
   ) : (
-    <p role="status" className="mt-3 rounded-lg bg-accent/10 px-3 py-2 text-sm font-medium text-accent">
+    <p role="status" className="mt-3 rounded-2xl bg-accent-soft px-4 py-3 text-sm font-bold text-accent">
       {state.success}
     </p>
   );

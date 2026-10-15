@@ -57,7 +57,7 @@ export async function loginWithCode(page: Page, email: string, name?: string) {
   await expect(page.getByRole("heading", { name: "Introduce el código" })).toBeVisible();
   await page.getByLabel("Código de 6 dígitos").fill(await readLoginCode(email));
   await page.getByRole("button", { name: "Entrar" }).click();
-  await expect(page.getByRole("heading", { name: "Mis grupos" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Tus amigos invisibles" })).toBeVisible();
 }
 
 /** Clicks a two-step confirm button, then confirms. */

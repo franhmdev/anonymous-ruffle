@@ -7,7 +7,7 @@ import { t } from "@/lib/i18n";
 
 type Props = {
   children: ReactNode;
-  variant?: "primary" | "secondary" | "danger";
+  variant?: "primary" | "secondary" | "danger" | "blue";
   className?: string;
   /** Critical operations are never queued: they are disabled while offline. */
   requiresOnline?: boolean;

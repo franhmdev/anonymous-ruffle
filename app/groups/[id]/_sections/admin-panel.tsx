@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { exclusions, participants } from "@/db/schema";
+import { exclusions, participants, type Participant } from "@/db/schema";
 import { ActionForm } from "@/components/action-form";
+import { BottomSheet } from "@/components/bottom-sheet";
 import { ConfirmSubmit } from "@/components/confirm-submit";
-import { GroupFields } from "@/components/group-fields";
+import { AlertIcon, MoreIcon, UserIcon, UserPlusIcon, UsersIcon } from "@/components/icons";
 import { LocalDateTime } from "@/components/local-date-time";
 import { ScheduleInput } from "@/components/schedule-input";
 import { ShareButton } from "@/components/share-button";
@@ -12,12 +13,10 @@ import { SubmitButton } from "@/components/submit-button";
 import type { GroupContext } from "@/lib/dal";
 import { MIN_PARTICIPANTS } from "@/lib/draw/algorithm";
 import { format, t } from "@/lib/i18n";
-import { getActiveGroupInvitation } from "@/lib/invitations";
 import {
   addExclusionAction,
   addParticipantAction,
   cancelScheduleAction,
-  deleteGroupAction,
   drawNowAction,
   redrawAction,
   regenerateInvitationAction,
@@ -26,189 +25,146 @@ import {
   reopenGroupAction,
   resendInvitationAction,
   scheduleDrawAction,
-  updateGroupAction,
 } from "../actions";
 
-export async function AdminPanel({ ctx }: { ctx: GroupContext }) {
+type Props = { ctx: GroupContext; invitation: { link: string; expiresAt: Date } | null };
+
+export async function AdminPanel({ ctx, invitation }: Props) {
   const { group } = ctx;
   const isDrawn = group.status === "drawn";
 
-  const [people, groupExclusions, invitation] = await Promise.all([
+  const [people, groupExclusions] = await Promise.all([
     db.query.participants.findMany({ where: eq(participants.groupId, group.id), orderBy: participants.createdAt }),
     db.query.exclusions.findMany({ where: eq(exclusions.groupId, group.id) }),
-    isDrawn ? null : getActiveGroupInvitation(group.id),
   ]);
   const nameOf = new Map(people.map((p) => [p.id, p.name]));
   const acceptedCount = people.filter((p) => p.status === "accepted").length;
 
+  // Exclusions are symmetric: list each one under both people.
+  const exclusionsOf = new Map<string, { id: string; other: string }[]>();
+  for (const exclusion of groupExclusions) {
+    for (const [self, other] of [
+      [exclusion.participantA, exclusion.participantB],
+      [exclusion.participantB, exclusion.participantA],
+    ]) {
+      exclusionsOf.set(self, [
+        ...(exclusionsOf.get(self) ?? []),
+        { id: exclusion.id, other: nameOf.get(other) ?? "?" },
+      ]);
+    }
+  }
+
+  const addParticipantSheet = (variant: "header" | "full") => (
+    <BottomSheet
+      trigger={
+        <>
+          <UserPlusIcon size={20} /> {variant === "header" ? t.participants.addShort : t.participants.add}
+        </>
+      }
+      triggerLabel={t.participants.add}
+      triggerClassName={variant === "header" ? "btn-blue min-h-11 rounded-full px-5" : "btn-blue w-full text-lg"}
+      title={t.participants.add}
+      icon={<UserPlusIcon size={28} />}
+      subtitle={t.participants.addHint}
+    >
+      <ActionForm action={addParticipantAction.bind(null, group.id)} resetOnSuccess className="space-y-3">
+        <div>
+          <label htmlFor={`participant-name-${variant}`} className="label">
+            {t.participants.name}
+          </label>
+          <input id={`participant-name-${variant}`} name="name" required maxLength={60} className="input" />
+        </div>
+        <div>
+          <label htmlFor={`participant-email-${variant}`} className="label">
+            {t.participants.email}
+          </label>
+          <input id={`participant-email-${variant}`} name="email" type="email" required className="input" />
+        </div>
+        {isDrawn ? (
+          <ConfirmSubmit warning={t.draw.reopenConfirm} variant="primary" fullWidth>
+            {t.participants.add}
+          </ConfirmSubmit>
+        ) : (
+          <SubmitButton className="w-full">{t.participants.add}</SubmitButton>
+        )}
+      </ActionForm>
+    </BottomSheet>
+  );
+
   return (
     <div className="space-y-6">
-      {/* Invitation link */}
-      <section className="card space-y-3" aria-labelledby="invite-title">
-        <h2 id="invite-title" className="text-lg font-bold">
-          {t.invite.sectionTitle}
-        </h2>
-        {isDrawn ? (
-          <p className="text-sm text-muted">{t.invite.afterDraw}</p>
-        ) : (
-          <>
-            <p className="text-sm">{t.invite.intro}</p>
-            {invitation ? (
-              <>
-                <ShareButton
-                  title={format(t.invite.shareTitle, { group: group.name })}
-                  text={format(t.invite.shareText, { group: group.name })}
-                  url={invitation.link}
-                />
-                <p className="hint">
-                  {t.invite.expiresPrefix} <LocalDateTime iso={invitation.expiresAt.toISOString()} />{" "}
-                  {t.invite.expiresSuffix}
-                </p>
-              </>
-            ) : (
-              <p className="text-sm text-muted">{t.invite.none}</p>
-            )}
-            <ActionForm action={regenerateInvitationAction.bind(null, group.id)}>
-              {invitation ? (
-                <ConfirmSubmit warning={t.invite.regenerateConfirm} variant="secondary">
-                  {t.invite.regenerate}
-                </ConfirmSubmit>
-              ) : (
-                <SubmitButton>{t.invite.create}</SubmitButton>
-              )}
-            </ActionForm>
-          </>
-        )}
-      </section>
-
       {/* Participants */}
-      <section className="card space-y-4" aria-labelledby="participants-title">
-        <h2 id="participants-title" className="text-lg font-bold">
-          {t.participants.title}{" "}
-          <span className="text-sm font-normal text-muted">
-            ({format(t.participants.acceptedCount, { count: acceptedCount })})
-          </span>
-        </h2>
-        <ul className="divide-y divide-border">
-          {people.map((person) => {
-            const affectsDraw = isDrawn && person.status === "accepted";
-            return (
-              <li key={person.id} className="flex flex-wrap items-center justify-between gap-2 py-3">
-                <div className="min-w-0">
-                  <p className="font-semibold">
-                    {person.name}
-                    {person.userId === ctx.user.id && <span className="text-muted"> ({t.common.you})</span>}
-                  </p>
-                  <p className="truncate text-sm text-muted">{person.email}</p>
-                  <span
-                    className={`badge mt-1 ${person.status === "accepted" ? "bg-accent/15 text-accent" : "bg-brand-soft text-brand"}`}
-                  >
-                    {person.status === "accepted" ? t.participants.accepted : t.participants.pending}
-                  </span>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {person.status === "pending" && person.email && !isDrawn && (
-                    <ActionForm action={resendInvitationAction.bind(null, group.id, person.id)}>
-                      <SubmitButton variant="secondary">{t.participants.resendInvite}</SubmitButton>
-                    </ActionForm>
-                  )}
-                  <ActionForm action={removeParticipantAction.bind(null, group.id, person.id)}>
-                    <ConfirmSubmit
-                      warning={format(
-                        affectsDraw ? t.participants.removeAfterDrawConfirm : t.participants.removeConfirm,
-                        {
-                          name: person.name,
-                        },
-                      )}
-                    >
-                      {t.participants.remove}
-                    </ConfirmSubmit>
-                  </ActionForm>
-                </div>
-              </li>
-            );
-          })}
+      <section aria-labelledby="participants-title" className="-mx-5">
+        <div className="mb-3 flex items-center justify-between px-5">
+          <h2 id="participants-title" className="text-2xl font-black">
+            {t.participants.title} <span className="text-muted">({acceptedCount})</span>
+          </h2>
+          {addParticipantSheet("header")}
+        </div>
+        <ul className="divide-y divide-border border-y border-border bg-surface/60">
+          {people.map((person) => (
+            <ParticipantRow
+              key={person.id}
+              person={person}
+              isMe={person.userId === ctx.user.id}
+              groupId={group.id}
+              isDrawn={isDrawn}
+              excluded={exclusionsOf.get(person.id) ?? []}
+              candidates={people.filter((p) => p.id !== person.id)}
+            />
+          ))}
         </ul>
+      </section>
 
-        <ActionForm
-          action={addParticipantAction.bind(null, group.id)}
-          resetOnSuccess
-          className="space-y-3 border-t border-border pt-4"
-        >
-          <h3 className="font-bold">{t.participants.add}</h3>
-          <p className="hint">{t.participants.addHint}</p>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <label htmlFor="participant-name" className="label">
-                {t.participants.name}
-              </label>
-              <input id="participant-name" name="name" required maxLength={60} className="input" />
-            </div>
-            <div>
-              <label htmlFor="participant-email" className="label">
-                {t.participants.email}
-              </label>
-              <input id="participant-email" name="email" type="email" required className="input" />
-            </div>
+      {addParticipantSheet("full")}
+
+      {!isDrawn && (
+        <div className="flex gap-3 text-lg font-semibold text-muted">
+          <AlertIcon className="mt-1 shrink-0" size={26} />
+          <div className="space-y-3">
+            <p>{t.groups.tipBeforeDraw}</p>
+            <p>{t.groups.tipWhenReady}</p>
           </div>
-          {isDrawn ? (
-            <ConfirmSubmit warning={t.draw.reopenConfirm} variant="secondary">
-              {t.participants.add}
-            </ConfirmSubmit>
-          ) : (
-            <SubmitButton variant="secondary">{t.participants.add}</SubmitButton>
-          )}
-        </ActionForm>
-      </section>
+        </div>
+      )}
 
-      {/* Exclusions */}
-      <section className="card space-y-3" aria-labelledby="exclusions-title">
-        <h2 id="exclusions-title" className="text-lg font-bold">
-          {t.exclusions.title}
-        </h2>
-        <p className="text-sm">{t.exclusions.intro}</p>
-        {groupExclusions.length === 0 ? (
-          <p className="text-sm text-muted">{t.exclusions.none}</p>
-        ) : (
-          <ul className="space-y-2">
-            {groupExclusions.map((exclusion) => (
-              <li
-                key={exclusion.id}
-                className="flex items-center justify-between gap-2 rounded-lg bg-background px-3 py-2"
-              >
-                <span>
-                  {format(t.exclusions.pair, {
-                    a: nameOf.get(exclusion.participantA) ?? "?",
-                    b: nameOf.get(exclusion.participantB) ?? "?",
-                  })}
-                </span>
-                {!isDrawn && (
-                  <ActionForm action={removeExclusionAction.bind(null, group.id, exclusion.id)}>
-                    <SubmitButton variant="danger">{t.common.delete}</SubmitButton>
-                  </ActionForm>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-        {isDrawn ? (
-          <p className="hint">{t.exclusions.lockedAfterDraw}</p>
-        ) : (
-          people.length >= 2 && (
-            <ActionForm action={addExclusionAction.bind(null, group.id)} className="space-y-3">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <PersonSelect id="participantA" label={t.exclusions.personA} people={people} />
-                <PersonSelect id="participantB" label={t.exclusions.personB} people={people} />
-              </div>
-              <SubmitButton variant="secondary">{t.exclusions.add}</SubmitButton>
-            </ActionForm>
-          )
-        )}
-      </section>
+      {/* Invitation link */}
+      {!isDrawn && (
+        <section className="card space-y-3" aria-labelledby="invite-title">
+          <h2 id="invite-title" className="text-xl font-black">
+            {t.invite.sectionTitle}
+          </h2>
+          <p className="font-semibold text-muted">{t.invite.intro}</p>
+          {invitation ? (
+            <>
+              <ShareButton
+                title={format(t.invite.shareTitle, { group: group.name })}
+                text={format(t.invite.shareText, { group: group.name })}
+                url={invitation.link}
+              />
+              <p className="hint">
+                {t.invite.expiresPrefix} <LocalDateTime iso={invitation.expiresAt.toISOString()} />{" "}
+                {t.invite.expiresSuffix}
+              </p>
+            </>
+          ) : (
+            <p className="font-semibold text-muted">{t.invite.none}</p>
+          )}
+          <ActionForm action={regenerateInvitationAction.bind(null, group.id)}>
+            {invitation ? (
+              <ConfirmSubmit warning={t.invite.regenerateConfirm} variant="secondary">
+                {t.invite.regenerate}
+              </ConfirmSubmit>
+            ) : (
+              <SubmitButton>{t.invite.create}</SubmitButton>
+            )}
+          </ActionForm>
+        </section>
+      )}
 
       {/* Draw */}
       <section className="card space-y-4" aria-labelledby="draw-title">
-        <h2 id="draw-title" className="text-lg font-bold">
+        <h2 id="draw-title" className="text-xl font-black">
           {t.draw.title}
         </h2>
         {isDrawn ? (
@@ -227,18 +183,23 @@ export async function AdminPanel({ ctx }: { ctx: GroupContext }) {
           </>
         ) : (
           <>
-            {acceptedCount < MIN_PARTICIPANTS && <p className="text-sm text-muted">{t.draw.minParticipants}</p>}
+            {acceptedCount < MIN_PARTICIPANTS && <p className="font-semibold text-muted">{t.draw.minParticipants}</p>}
             <ActionForm action={drawNowAction.bind(null, group.id)}>
-              <ConfirmSubmit warning={t.draw.nowConfirm} variant="primary" offlineMessage={t.draw.requiresOnline}>
+              <ConfirmSubmit
+                warning={t.draw.nowConfirm}
+                variant="primary"
+                offlineMessage={t.draw.requiresOnline}
+                fullWidth
+              >
                 {t.draw.now}
               </ConfirmSubmit>
             </ActionForm>
 
             <div className="border-t border-border pt-4">
-              <h3 className="mb-2 font-bold">{t.draw.schedule}</h3>
+              <h3 className="mb-2 font-black">{t.draw.schedule}</h3>
               {group.scheduledDrawAt && (
                 <div className="mb-3 space-y-2">
-                  <p className="text-sm">
+                  <p className="font-semibold">
                     {t.groups.scheduledFor} <LocalDateTime iso={group.scheduledDrawAt.toISOString()} />
                   </p>
                   <ActionForm action={cancelScheduleAction.bind(null, group.id)}>
@@ -254,40 +215,128 @@ export async function AdminPanel({ ctx }: { ctx: GroupContext }) {
           </>
         )}
       </section>
-
-      {/* Settings */}
-      <section className="card space-y-3" aria-labelledby="settings-title">
-        <h2 id="settings-title" className="text-lg font-bold">
-          {t.groups.settings}
-        </h2>
-        <ActionForm action={updateGroupAction.bind(null, group.id)} className="space-y-4">
-          <GroupFields defaults={group} />
-          <SubmitButton variant="secondary">{t.common.save}</SubmitButton>
-        </ActionForm>
-        <ActionForm action={deleteGroupAction.bind(null, group.id)} className="border-t border-border pt-4">
-          <ConfirmSubmit warning={t.groups.deleteGroupConfirm}>{t.groups.deleteGroup}</ConfirmSubmit>
-        </ActionForm>
-      </section>
     </div>
   );
 }
 
-function PersonSelect({ id, label, people }: { id: string; label: string; people: { id: string; name: string }[] }) {
+function ParticipantRow({
+  person,
+  isMe,
+  groupId,
+  isDrawn,
+  excluded,
+  candidates,
+}: {
+  person: Participant;
+  isMe: boolean;
+  groupId: string;
+  isDrawn: boolean;
+  excluded: { id: string; other: string }[];
+  candidates: Participant[];
+}) {
+  const affectsDraw = isDrawn && person.status === "accepted";
+
   return (
-    <div>
-      <label htmlFor={id} className="label">
-        {label}
-      </label>
-      <select id={id} name={id} required defaultValue="" className="input">
-        <option value="" disabled>
-          —
-        </option>
-        {people.map((person) => (
-          <option key={person.id} value={person.id}>
-            {person.name}
-          </option>
-        ))}
-      </select>
-    </div>
+    <li className="space-y-3 px-5 py-4">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <UserIcon className="shrink-0 text-muted" size={22} />
+          <div className="min-w-0">
+            <p className="truncate text-xl font-black">
+              {person.name} {isMe && <span className="font-bold text-muted">({t.common.you})</span>}
+            </p>
+            {person.status === "pending" && (
+              <span className="badge bg-warn-soft text-warn">{t.participants.pending}</span>
+            )}
+          </div>
+        </div>
+        <BottomSheet
+          trigger={<MoreIcon />}
+          triggerLabel={format(t.participants.options, { name: person.name })}
+          triggerClassName="inline-flex size-11 items-center justify-center rounded-2xl bg-surface text-brand shadow-sm"
+          title={person.name}
+          icon={<UserIcon size={28} />}
+          subtitle={person.email ?? undefined}
+        >
+          {person.status === "pending" && person.email && !isDrawn && (
+            <ActionForm action={resendInvitationAction.bind(null, groupId, person.id)}>
+              <SubmitButton variant="secondary" className="w-full text-lg">
+                {t.participants.resendInvite}
+              </SubmitButton>
+            </ActionForm>
+          )}
+          <ActionForm action={removeParticipantAction.bind(null, groupId, person.id)}>
+            <ConfirmSubmit
+              warning={format(affectsDraw ? t.participants.removeAfterDrawConfirm : t.participants.removeConfirm, {
+                name: person.name,
+              })}
+              fullWidth
+            >
+              {t.participants.remove}
+            </ConfirmSubmit>
+          </ActionForm>
+        </BottomSheet>
+      </div>
+
+      {excluded.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 pl-9">
+          <span className="text-sm font-bold text-muted">{t.exclusions.noGiftTo}</span>
+          {excluded.map((exclusion) =>
+            isDrawn ? (
+              <span key={exclusion.id} className="badge bg-brand-soft text-brand">
+                {exclusion.other}
+              </span>
+            ) : (
+              <ActionForm key={exclusion.id} action={removeExclusionAction.bind(null, groupId, exclusion.id)}>
+                <button
+                  type="submit"
+                  className="badge gap-1 bg-brand-soft py-1 text-sm text-brand"
+                  aria-label={`${t.common.delete}: ${format(t.exclusions.pair, { a: person.name, b: exclusion.other })}`}
+                >
+                  {exclusion.other} <span aria-hidden="true">×</span>
+                </button>
+              </ActionForm>
+            ),
+          )}
+        </div>
+      )}
+
+      {!isDrawn && candidates.length > 0 && (
+        <div className="pl-9">
+          <BottomSheet
+            trigger={
+              <>
+                <UsersIcon size={20} /> {t.exclusions.addFor}
+              </>
+            }
+            triggerLabel={`${t.exclusions.addFor}: ${person.name}`}
+            triggerClassName="btn-outline min-h-11 rounded-2xl px-4 text-base"
+            title={t.exclusions.addFor}
+            icon={<UsersIcon size={28} />}
+            subtitle={t.exclusions.intro}
+          >
+            <ActionForm action={addExclusionAction.bind(null, groupId)} className="space-y-3">
+              <input type="hidden" name="participantA" value={person.id} />
+              <div>
+                <label htmlFor={`exclude-${person.id}`} className="label">
+                  {format(t.exclusions.pair, { a: person.name, b: t.exclusions.choose })}
+                </label>
+                <select id={`exclude-${person.id}`} name="participantB" required defaultValue="" className="input">
+                  <option value="" disabled>
+                    —
+                  </option>
+                  {candidates.map((candidate) => (
+                    <option key={candidate.id} value={candidate.id}>
+                      {candidate.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <SubmitButton className="w-full">{t.exclusions.add}</SubmitButton>
+            </ActionForm>
+          </BottomSheet>
+        </div>
+      )}
+    </li>
   );
 }

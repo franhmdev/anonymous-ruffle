@@ -13,7 +13,8 @@ async function joinAsGuest(browser: Browser, inviteLink: string, name: string): 
   await expect(page.getByRole("heading", { name: /Te han invitado/ })).toBeVisible();
   await page.getByLabel("Tu nombre").fill(name);
   await page.getByRole("button", { name: "Unirme" }).click();
-  await expect(page.getByRole("heading", { name: "Familia E2E" })).toBeVisible();
+  await page.waitForURL(/\/groups\/[0-9a-f-]{36}/);
+  await expect(page.getByRole("heading", { name: "Familia E2E", exact: true })).toBeVisible();
   return page;
 }
 
@@ -23,12 +24,12 @@ test("create, invite, join as guests, draw and see only your own result", async 
   await loginWithCode(page, adminEmail, "Ana");
 
   // Create the group.
-  await page.getByRole("link", { name: "Crear grupo" }).click();
+  await page.getByRole("link", { name: "Nuevo grupo" }).click();
   await page.getByLabel("Nombre del grupo").fill("Familia E2E");
   await page.getByLabel("Presupuesto aproximado (€)").fill("25");
   await page.getByLabel("Fecha de entrega").fill("2026-12-24");
   await page.getByRole("button", { name: "Crear grupo" }).click();
-  await expect(page.getByRole("heading", { name: "Familia E2E" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Familia E2E", exact: true })).toBeVisible();
 
   // The invitation link is shown with share options.
   const inviteLink = (await page.getByLabel("Enlace").textContent())!.trim();
@@ -45,22 +46,25 @@ test("create, invite, join as guests, draw and see only your own result", async 
 
   // An impossible exclusion is reported clearly: with Ana ↔ Bea, both could only give to Carlos.
   await page.reload();
-  const addExclusion = async (a: string, b: string) => {
-    await page.getByLabel("Persona", { exact: true }).selectOption({ label: a });
-    await page.getByLabel("No debe regalar a / recibir de").selectOption({ label: b });
-    await page.getByRole("button", { name: "Añadir exclusión" }).click();
-    // Pairs are symmetric, so either order may be displayed.
-    await expect(page.getByText(new RegExp(`${a} ↔ ${b}|${b} ↔ ${a}`))).toBeVisible();
-  };
-  await addExclusion("Ana", "Bea");
+  // Exclusions are added from each person's row, in a bottom sheet that closes on success.
+  const sheet = page.getByRole("dialog", { name: "Añadir exclusiones" }).filter({ visible: true });
+  // Retry until hydration has attached the click handler.
+  await expect(async () => {
+    await page.getByRole("button", { name: "Añadir exclusiones: Ana" }).click();
+    await expect(sheet).toBeVisible({ timeout: 1_000 });
+  }).toPass();
+  await sheet.getByLabel(/Ana ↔/).selectOption({ label: "Bea" });
+  await sheet.getByRole("button", { name: "Añadir exclusión" }).click();
+  const removeExclusion = page.getByRole("button", { name: "Eliminar: Ana ↔ Bea" });
+  await expect(removeExclusion).toBeVisible();
   await confirmAction(page, "Hacer el sorteo ahora");
   await expect(page.getByRole("alert").filter({ hasText: "no hay forma de hacer un sorteo válido" })).toBeVisible();
 
   // Remove the exclusion and draw.
-  await page.getByRole("button", { name: "Eliminar" }).click();
-  await expect(page.getByText("No hay exclusiones.")).toBeVisible();
+  await removeExclusion.click();
+  await expect(removeExclusion).toHaveCount(0);
   await confirmAction(page, "Hacer el sorteo ahora");
-  await expect(page.getByText("Sorteo realizado", { exact: true })).toBeVisible();
+  await expect(page.getByText(/¡Sorteo realizado!/)).toBeVisible();
 
   // The admin gets their result by email and sees all results.
   const resultEmail = await findEmail(adminEmail, "Tu amigo invisible");
@@ -88,10 +92,10 @@ test("create, invite, join as guests, draw and see only your own result", async 
 test("wishlist rejects non-http links and opens store links safely", async ({ page }) => {
   const email = uniqueEmail("wish");
   await loginWithCode(page, email, "Wendy");
-  await page.getByRole("link", { name: "Crear grupo" }).click();
+  await page.getByRole("link", { name: "Nuevo grupo" }).click();
   await page.getByLabel("Nombre del grupo").fill("Lista E2E");
   await page.getByRole("button", { name: "Crear grupo" }).click();
-  await page.getByRole("link", { name: "Mi lista de deseos" }).click();
+  await page.getByRole("link", { name: /Mi lista de deseos/ }).click();
 
   await page.getByLabel("Idea").fill("Algo peligroso");
   await page.getByLabel(/Enlace a la tienda/).evaluate((input: HTMLInputElement) => (input.type = "text"));
@@ -118,13 +122,13 @@ test("a wrong code is rejected and the session survives a reload", async ({ page
   await page.getByRole("button", { name: "Entrar" }).click();
   // The real code could theoretically be 000000; the message covers the usual case.
   await expect(
-    page.getByText("El código no es correcto.").or(page.getByRole("heading", { name: "Mis grupos" })),
+    page.getByText("El código no es correcto.").or(page.getByRole("heading", { name: "Tus amigos invisibles" })),
   ).toBeVisible();
 
   await loginWithCode(page, email);
   // A page load renews the session cookie (sliding expiry) with safe attributes.
   const response = await page.reload();
-  await expect(page.getByRole("heading", { name: "Mis grupos" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Tus amigos invisibles" })).toBeVisible();
   const setCookie = (await response!.headerValue("set-cookie")) ?? "";
   expect(setCookie).toMatch(/ai_session=/);
   expect(setCookie).toMatch(/HttpOnly/i);

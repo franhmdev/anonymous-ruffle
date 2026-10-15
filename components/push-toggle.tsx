@@ -88,14 +88,14 @@ export function PushToggle({ publicKey }: { publicKey: string | null }) {
       )}
       {status === "on" && (
         <>
-          <p className="text-sm text-accent">{t.push.enabled}</p>
+          <p className="text-sm font-bold text-accent">{t.push.enabled}</p>
           <button type="button" className="btn-secondary" onClick={disable}>
             {t.push.disable}
           </button>
         </>
       )}
       {error && (
-        <p role="alert" className="text-sm text-brand">
+        <p role="alert" className="text-sm font-bold text-danger">
           {error}
         </p>
       )}

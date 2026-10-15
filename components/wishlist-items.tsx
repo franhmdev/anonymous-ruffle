@@ -19,9 +19,9 @@ export function WishlistItems({
       {items.map((item) => {
         const url = item.url && safeUrlSchema.safeParse(item.url).success ? item.url : null;
         return (
-          <li key={item.id} className="flex items-start justify-between gap-3 rounded-xl bg-background px-3 py-2">
+          <li key={item.id} className="flex items-start justify-between gap-3 rounded-2xl bg-background px-4 py-3">
             <div className="min-w-0">
-              <p className="break-words">{item.text}</p>
+              <p className="break-words text-lg font-bold">{item.text}</p>
               {url && (
                 <a
                   href={url}

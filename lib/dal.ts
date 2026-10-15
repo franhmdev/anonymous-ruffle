@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, or } from "drizzle-orm";
+import { and, desc, eq, or, sql } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import { cache } from "react";
 import { db } from "@/db";
@@ -51,11 +51,15 @@ export async function listMyGroups(userId: string) {
       deliveryDate: groups.deliveryDate,
       adminId: groups.adminId,
       createdAt: groups.createdAt,
+      participantCount:
+        sql<number>`(select count(*) from participants p where p.group_id = ${groups.id} and p.status = 'accepted')`.mapWith(
+          Number,
+        ),
     })
     .from(groups)
     .leftJoin(participants, and(eq(participants.groupId, groups.id), eq(participants.userId, userId)))
     .where(or(eq(groups.adminId, userId), eq(participants.status, "accepted")))
-    .orderBy(groups.createdAt);
+    .orderBy(desc(groups.createdAt));
 }
 
 /** The participant the current member has to give a present to. */
