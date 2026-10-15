@@ -1,194 +1,268 @@
-# CLAUDE.md — App de Amigo Invisible (PWA)
+# CLAUDE.md — Amigo Invisible (PWA)
 
 Este archivo da contexto a Claude Code sobre el proyecto. Léelo entero antes de escribir código y respétalo en cada tarea.
+Describe **la app tal y como está construida**: si hubiera que rehacerla desde cero, seguir este documento debe dar como resultado la misma app (funcionalidad, arquitectura, diseño, despliegue y decisiones).
 
 ## Descripción del proyecto
 
-Aplicación **PWA (Progressive Web App)** para organizar sorteos de amigo invisible. Un administrador crea grupos, invita a participantes por WhatsApp, define exclusiones y presupuesto, y realiza el sorteo de forma inmediata o programada. Los resultados se envían por email y se pueden compartir por WhatsApp y otras apps.
+**Amigo Invisible** es una PWA para organizar sorteos de amigo invisible. Un administrador crea grupos, invita a participantes por WhatsApp (enlace) o por email, define exclusiones y presupuesto, y realiza el sorteo en el momento o programado. Cada participante ve solo a quién regala (en la app y por email) y la lista de deseos de esa persona.
+
+- Producción: `https://anonymous-ruffle.vercel.app` (Vercel, región `fra1`).
+- Repositorio: `https://github.com/franhmdev/anonymous-ruffle` (rama `main`; cada push despliega).
+- Base de datos: Supabase PostgreSQL en `eu-west-1`.
 
 ## Idioma
 
-- Interfaz de usuario, textos, emails y mensajes de error: **español (España)**.
-- Código, nombres de variables, commits y comentarios técnicos: inglés.
-- Diseñar los textos para poder internacionalizar más adelante (no dejar cadenas "a fuego" en los componentes).
+- Interfaz, textos, emails y mensajes de error: **español (España)**.
+- Código, nombres de variables, commits y comentarios técnicos: **inglés**.
+- **Ningún texto de interfaz en los componentes**: todo sale del catálogo `lib/i18n/es.ts` (objeto `t`), con `format(plantilla, {vars})` para interpolar `{nombre}`. Única excepción: `public/offline.html` (estático, servido por el service worker).
 
-## Stack tecnológico (decidido, modificable si hay un buen motivo)
+## Stack (versiones instaladas)
 
-| Capa | Elección | Motivo |
+| Capa | Elección | Notas |
 |---|---|---|
-| Lenguaje | TypeScript (modo estricto) | Un solo lenguaje en cliente y servidor |
-| Framework | Next.js (App Router) + React | Frontend y backend en un único proyecto, buen soporte PWA |
-| Estilos | Tailwind CSS | Rapidez y diseño mobile-first |
-| PWA / Service Worker | Serwist (`@serwist/next`) | Mantenido, integra bien con Next.js |
-| Base de datos | PostgreSQL (región UE) | Datos muy relacionales: grupos, exclusiones, asignaciones |
-| ORM | Drizzle ORM | Tipado y migraciones sencillas |
-| Validación | Zod | Validar entradas en servidor y cliente |
-| Emails | SMTP con `nodemailer` (ahora Gmail con contraseña de aplicación) o Resend (región UE) | Sin dominio propio, Resend solo envía al dueño de la cuenta; con dominio, volver a Resend |
-| Tareas programadas | Cron del hosting que llama a un endpoint protegido (p. ej. Vercel Cron) | Para los sorteos con fecha; sin servidor propio |
-| Notificaciones push | Web Push (VAPID) con la librería `web-push` | Estándar PWA; complementa al email, no lo sustituye |
-| Tests | Vitest (unitarios) + Playwright (e2e, emulando móvil) | |
-| Hosting | Vercel + base de datos gestionada, ambos en región UE | Despliegue simple y cumplimiento RGPD |
+| Lenguaje | TypeScript estricto | `tsconfig` target ES2022; `worker/` tiene su propio tsconfig (lib `webworker`) |
+| Framework | **Next.js 16.4** (App Router, Turbopack) + **React 19.3** | `cacheComponents` **desactivado** (ver Decisiones). `middleware` se llama **`proxy.ts`** en Next 16. Leer `node_modules/next/dist/docs/` ante dudas: esta versión difiere de versiones anteriores |
+| Estilos | **Tailwind CSS 4** (`@tailwindcss/turbopack`) | Tokens y utilidades propias en `app/globals.css` (ver Diseño) |
+| Tipografía | **Nunito** vía `next/font/google` (fuente variable, sin lista de pesos) | |
+| PWA | **Serwist 9** en modo CLI: `@serwist/next/config` + `@serwist/cli` | El service worker se compila **después** de `next build` (`serwist build serwist.config.mjs`), compatible con Turbopack |
+| Base de datos | PostgreSQL (Supabase UE en prod, Docker en local) | Driver `postgres` (postgres.js) con `prepare: false` |
+| ORM | **Drizzle ORM 0.45** + drizzle-kit 0.31 | Migraciones SQL en `db/migrations` |
+| Validación | **Zod 4** | `z.email()`, `z.url({protocol})`, `z.iso.date()`… |
+| Emails | **SMTP con `nodemailer`** (Gmail con contraseña de aplicación) **o Resend** | SMTP tiene prioridad si está configurado |
+| Push | **Web Push (VAPID)** con `web-push` | Opcional; el email es el canal principal |
+| Tests | **Vitest 4** (unitarias + integración) y **Playwright** (e2e, Pixel 7 e iPhone 15) | |
+| Otros | `server-only` (protege módulos de servidor), `dotenv` (drizzle.config y tests) | |
 
-Sin una razón clara, no cambiar el stack ni añadir dependencias nuevas.
+No añadir dependencias sin justificarlo. Iconos: **SVG inline propios** en `components/icons.tsx` (no hay librería de iconos).
 
-## Requisitos de PWA
+## Estructura
 
-- **Instalable**: `manifest.webmanifest` con nombre, iconos (incluido maskable), `display: standalone`, `theme_color`, `lang: es` y `start_url`.
-- **HTTPS obligatorio** en todos los entornos salvo `localhost`.
-- **Service worker** con estrategia:
-  - App shell y recursos estáticos: caché primero.
-  - Datos de grupos y listas de deseos: red primero con respaldo en caché (lectura sin conexión).
-  - **Las operaciones críticas requieren conexión**: realizar el sorteo, ver resultados, aceptar invitaciones. Mostrar un aviso claro si no hay red; no encolar estas acciones.
-  - **Nunca cachear** las respuestas con resultados del sorteo en el service worker ni en almacenamiento compartido.
-- **Actualizaciones**: avisar al usuario cuando haya una versión nueva ("Actualizar") en lugar de recargar sin avisar.
-- **Aviso de instalación**: sugerir instalar la app tras una acción con valor (por ejemplo, al aceptar una invitación), nunca al primer segundo. En iOS no existe el aviso automático: mostrar instrucciones breves (Compartir → Añadir a pantalla de inicio).
-- **Compatibilidad**: probar en Chrome Android y Safari iOS (la instalación y las notificaciones se comportan distinto).
-- **Rendimiento y accesibilidad**: objetivo de Lighthouse ≥ 90 en PWA, rendimiento y accesibilidad.
+```
+app/
+  layout.tsx                 html lang=es, Nunito, await connection(), OfflineBanner, ServiceWorkerManager, InstallPromptListener
+  page.tsx                   Inicio: landing (anónimo) o "Tus amigos invisibles" (con sesión)
+  manifest.ts                manifest.webmanifest
+  login/ (page, verify/page, actions.ts)   código de 6 dígitos
+  auth/verify/page.tsx       enlace mágico (requiere pulsar "Entrar": POST)
+  account/ (page, actions)   nombre, vincular email, push, cerrar sesión (este / todos), borrar cuenta, enlace a privacidad
+  join/ (page, actions)      pegar un enlace de invitación → /invite/[token]
+  invite/[token]/            ver invitación y unirse (invitado o con cuenta)
+  groups/new/                crear grupo
+  groups/[id]/page.tsx       detalle del grupo (+ ejecuta un sorteo programado vencido)
+  groups/[id]/_sections/     admin-panel, member-list, group-options (bottom sheet)
+  groups/[id]/edit/          editar nombre, presupuesto y fecha
+  groups/[id]/match/         a quién regalo + su lista de deseos (NUNCA cacheado)
+  groups/[id]/results/       todas las asignaciones (solo admin; NUNCA cacheado)
+  groups/[id]/wishlist/      mi lista de deseos
+  groups/[id]/actions.ts     todas las Server Actions del grupo
+  api/cron/draws/route.ts    cron protegido con CRON_SECRET
+  api/push/subscribe/route.ts  alta/baja de suscripciones push
+  privacy/, not-found.tsx, error.tsx
+components/                  page-shell, bottom-sheet, icons, action-form, submit-button, confirm-submit,
+                             share-button (ShareButton + ShareAction), group-fields, schedule-input, time-zone-input,
+                             local-date-time, wishlist-items, push-toggle, logout-form, online-status, pwa/*
+lib/                         env, crypto, i18n, validation, rate-limit, form-state, dal, permissions, invitations,
+                             account, push, auth/{session,login,merge}, draw/{algorithm,service}, email/{send,templates}
+db/                          schema.ts, index.ts (cliente perezoso), migrations/
+worker/sw.ts                 service worker (fuente) → public/sw.js (generado, en .gitignore)
+scripts/generate-icons.mjs   genera los PNG de iconos sin dependencias (zlib)
+proxy.ts                     CSP con nonce + renovación de la cookie de sesión
+tests/unit, tests/integration, tests/e2e
+```
 
-### Particularidades de iOS que condicionan el diseño
-- Las notificaciones push **solo funcionan si la PWA está instalada en la pantalla de inicio** (iOS 16.4 o superior). Por eso **el email es siempre el canal principal**; el push es un extra opcional.
-- Safari y la PWA instalada **no comparten cookies ni almacenamiento**. Un enlace mágico abre Safari, no la PWA, y la sesión no llegaría a la app instalada. Por eso el acceso debe poder completarse con un **código de 6 dígitos que se escribe dentro de la propia app** (el enlace queda como alternativa).
-- Los enlaces de WhatsApp se abren en el navegador, no en la PWA. El flujo de aceptar una invitación **debe funcionar completo en el navegador**, y la instalación es un paso posterior opcional.
-
-## Requisitos funcionales
+## Funcionalidad
 
 ### 1. Registro y sesión
-- Registro ligero: **nombre y correo electrónico**, sin contraseña.
-- Acceso mediante **código de un solo uso de 6 dígitos por email** (caduca en 10 minutos, un solo uso, limitado a pocos intentos). Se ofrece también un enlace mágico equivalente.
-- Tras el primer acceso, la **sesión se guarda a nivel de dispositivo**:
-  - Cookie de sesión `HttpOnly` + `Secure` + `SameSite=Lax`, emitida por el servidor (preferible a guardar el token en `localStorage`).
-  - Sesión larga (p. ej. 90 días) con renovación deslizante y posibilidad de revocarla.
-- Los participantes que llegan por la invitación de WhatsApp pueden entrar como **invitados** (cookie anónima con identificador de dispositivo) y **vincular su email después** para recuperar la cuenta en otro dispositivo o si borran los datos del navegador.
-- Opción de cerrar sesión en todos los dispositivos.
-- La identidad no debe existir **solo** en el dispositivo: la fuente de verdad es siempre el servidor.
+- Registro ligero: **nombre y email**, sin contraseña. El formulario de `/login` pide email y nombre (el nombre solo hace falta la primera vez; si un usuario nuevo pide otro código sin nombre, se reutiliza el de su petición anterior de las últimas 24 h).
+- Acceso con **código de 6 dígitos** (CSPRNG) por email: caduca en **10 min**, un solo uso (al pedir uno nuevo se invalidan los anteriores), **máx. 5 intentos** por código. Se guarda solo `HMAC(SESSION_SECRET, email:código)`.
+- **Enlace mágico** equivalente en el mismo email → `/auth/verify?token=…` muestra un botón «Entrar» (POST) para que los escáneres de correo no consuman el token.
+- Sesión: token aleatorio de 256 bits en cookie **`HttpOnly`, `Secure` (prod), `SameSite=Lax`, `Path=/`**, nombre `__Host-ai_session` en producción y `ai_session` en desarrollo. Duración **90 días**, **deslizante**: `proxy.ts` reemite la cookie en cada navegación de documento y el servidor amplía `expires_at` como mucho una vez al día. En BD solo el hash. Revocable.
+- Cerrar sesión (este dispositivo) y **cerrar sesión en todos los dispositivos**. Al cerrar sesión el cliente borra las cachés privadas del service worker (`ai-private-*`).
+- **Invitados**: quien llega por el enlace de WhatsApp se une solo con su nombre; se crea un `user` sin email y una sesión normal. Puede **vincular su email** desde «Mi cuenta» (código con `link_user_id`); si el email ya tenía cuenta, se **fusionan** (participaciones, grupos administrados, sesiones y suscripciones pasan a la cuenta existente; si ambos estaban en el mismo grupo se elimina el duplicado y, si estaba sorteado, se anula el sorteo).
+- **Crear grupos requiere email verificado** (el admin necesita recibir avisos).
 
 ### 2. Grupos
-- Grupos ilimitados por usuario.
-- Cada grupo tiene: nombre, administrador (creador), **presupuesto aproximado** y **fecha de entrega**.
+- Ilimitados. Campos: nombre (≤80), presupuesto aproximado en euros enteros (opcional), fecha de entrega (`date`, opcional), modo sorpresa, zona horaria IANA (tomada del navegador), estado `draft`/`drawn`, sorteo programado (UTC), último error de sorteo programado.
+- Al crear: casilla «Yo también participo» (marcada por defecto; añade al admin como participante aceptado) y «Modo sorpresa». Se genera automáticamente el enlace de invitación y se redirige a `/groups/[id]?welcome=1`.
+- Editar en `/groups/[id]/edit`. Borrar grupo (con confirmación) desde «Opciones del grupo».
 
 ### 3. Participantes e invitaciones
-- Cada participante tiene nombre y correo electrónico.
-- El administrador comparte una **invitación por WhatsApp** (enlace único por grupo).
-- **Solo pueden formar parte del grupo quienes aceptan la invitación.**
-- El administrador puede **añadir y quitar** participantes.
-- Las invitaciones **caducan a los 30 días o al realizarse el sorteo**, lo que ocurra primero. El administrador puede regenerar el enlace, lo que invalida el anterior.
-- Si se modifica la lista de participantes después de un sorteo, el sorteo queda **invalidado** y el administrador debe repetirlo; se avisa antes de confirmar el cambio.
+- **Enlace de grupo**: el token se **deriva** como `HMAC(SESSION_SECRET, "invitation-token:" + invitation.id)`; en BD solo se guarda su hash. Así el admin puede volver a ver y compartir el mismo enlace; «Generar un enlace nuevo» revoca el anterior.
+- **Invitación personal por email**: «Añadir participante» (nombre + email) crea un participante `pending` y le envía un enlace personal; «Reenviar invitación» genera uno nuevo.
+- Las invitaciones **caducan a los 30 días o al hacerse el sorteo** (se revocan todas al sortear) y no valen si el grupo no está en `draft`.
+- **Solo cuentan los participantes aceptados.** Al aceptar: si el usuario ya estaba, se marca aceptado; si la invitación es personal (o hay un pendiente con su email), se reclama ese registro; si no, se crea uno nuevo. Se bloquea la fila del grupo (`FOR UPDATE`) para no aceptar durante un sorteo.
+- `/join`: pegar un enlace (o solo el token) lleva a `/invite/[token]`. La página de invitación funciona completa en el navegador, sin instalar nada.
+- Quitar participante: con confirmación. **Cualquier cambio de participantes con el grupo sorteado anula el sorteo** (se pide `confirm=yes` en servidor y se avisa a todos por email y push).
 
-### 4. Exclusiones y restricciones
-- Solo el **creador del grupo** puede definirlas (por ejemplo, parejas o familiares que no deben regalarse entre sí).
-- El algoritmo de sorteo debe respetarlas.
-- Si las restricciones hacen imposible un sorteo válido, informar con un mensaje claro en lugar de fallar o entrar en bucle.
+### 4. Exclusiones
+- Solo el admin. **Simétricas** (A↔B), guardadas con `participant_a < participant_b` (CHECK + único).
+- En la UI se gestionan **por persona**: bajo cada participante, etiquetas «No se regalan entre sí con: X ×» (pulsar × elimina) y botón «Añadir exclusiones» que abre un bottom sheet con un selector.
+- Solo editables en `draft`; para cambiarlas tras el sorteo hay que **reabrir el grupo** (anula el sorteo y avisa).
 
 ### 5. Sorteo
-- El administrador puede **realizarlo en el momento** o **programarlo para una fecha y hora** (se almacena en UTC y se muestra en la zona horaria del usuario).
-- Reglas del algoritmo:
-  - Nadie se regala a sí mismo.
-  - Se respetan todas las exclusiones.
-  - Cada persona da un regalo y recibe uno (permutación válida).
-  - Aleatoriedad criptográficamente segura (`crypto.getRandomValues` o equivalente), nunca `Math.random()`.
-- El sorteo **siempre se ejecuta en el servidor**, nunca en el cliente.
-- Las asignaciones se guardan en servidor y el sorteo no puede repetirse sin acción explícita del administrador.
-- El sorteo programado debe ser **idempotente**: si el cron se ejecuta dos veces o con retraso, no genera dos sorteos. Usar un bloqueo o una restricción única en base de datos.
-- Si al llegar la fecha programada el grupo no es sorteable (menos de 3 participantes, restricciones imposibles), no se sortea y se avisa al administrador por email.
+- Algoritmo (`lib/draw/algorithm.ts`, puro y testeado):
+  - Mínimo **3** participantes aceptados; nadie se regala a sí mismo; respeta exclusiones; permutación válida. Probado con 100 participantes en menos de 2 s (`MAX_PARTICIPANTS = 100` existe como referencia, pero **todavía no se aplica** ningún límite).
+  - Aleatoriedad con `crypto.randomInt` (CSPRNG), nunca `Math.random()`.
+  - Primero comprueba que existe un emparejamiento perfecto (algoritmo de Kuhn); si no, devuelve `impossible` sin buscar.
+  - Intenta **muestreo por rechazo** (hasta 2.000 permutaciones aleatorias, uniforme) y, si no encuentra, una **construcción** que elige receptor al azar manteniendo siempre un emparejamiento perfecto posible → siempre termina.
+- Servicio (`lib/draw/service.ts`): el sorteo **siempre en servidor**, dentro de una transacción con `SELECT … FOR UPDATE` sobre el grupo. Si ya está `drawn` → `already_drawn` (idempotente). Inserta asignaciones (únicas por `group+giver` y `group+receiver`, CHECK giver≠receiver), pasa a `drawn`, revoca invitaciones.
+- Tras sortear (con `after()`): email a cada participante con **solo su** asignación (presupuesto, fecha y enlace a `/match`) y push genérico sin revelar nada.
+- **Repetir sorteo** (anula y vuelve a sortear) y **Reabrir grupo** (anula y vuelve a `draft`), ambos con confirmación; se notifica a todos.
+- **Programado**: `datetime-local` convertido a ISO UTC en el navegador; se guarda UTC y se muestra en la zona horaria del usuario (`LocalDateTime`). Se ejecuta:
+  1. con el **cron diario** de Vercel (`0 7 * * *`, plan gratuito) → `GET /api/cron/draws` con `Authorization: Bearer CRON_SECRET`;
+  2. y además **al abrir el grupo** cuando ya ha pasado la hora (`runScheduledDrawIfDue`), para no esperar al cron.
+  Ambos son idempotentes. Si al llegar la hora no es sorteable (<3 aceptados o imposible), **se borra la programación**, se guarda `last_draw_error` (se muestra al admin) y se le envía un email.
 
 ### 6. Resultados
-- Sección aparte de **Resultados**, visible para el **creador del grupo**, donde ve quién le ha tocado a cada persona.
-- Cada participante ve únicamente a quién tiene que regalar.
-- **Modo sorpresa (opcional, se elige al crear el grupo)**: el administrador participa sin ver las asignaciones de los demás. Solo podría consultarlas con una confirmación explícita que avise de que se pierde la sorpresa. Por defecto está desactivado, de modo que el administrador ve los resultados como se pidió originalmente.
+- `/groups/[id]/results`: solo el admin ve todas las asignaciones (tabla). Si el admin participa y el grupo está en **modo sorpresa**, primero se muestra un aviso y debe confirmar explícitamente (se guarda `surprise_revealed_at`).
+- `/groups/[id]/match`: cada participante ve **solo** a quién regala y la lista de deseos de esa persona.
+- Nadie más ve listas de deseos ajenas (ni el admin).
+- Enlaces a estas páginas con `prefetch={false}`; respuestas con `Cache-Control: private, no-store`.
 
 ### 7. Lista de deseos
-- Cada participante puede añadir ideas de regalo y **enlaces a tiendas**.
-- Quien le regala puede ver la lista de la persona que le ha tocado, y nadie más.
-- Validar y sanear los enlaces (solo `http`/`https`, con `rel="noopener noreferrer"` al abrirlos).
-- Disponible en modo lectura sin conexión.
+- Ideas (≤200 caracteres) con enlace opcional; máx. 30 por participante.
+- Enlaces: solo `http`/`https` (validados al guardar y al mostrar), abiertos con `target="_blank" rel="noopener noreferrer nofollow"` y `referrerPolicy="no-referrer"`.
+- La propia lista se puede leer sin conexión (caché del service worker).
 
 ### 8. Notificaciones y compartir
-- Envío **automático de resultados por email** al realizarse el sorteo.
-- **Notificación push opcional** (con permiso explícito del usuario) para avisos como "ya se ha realizado el sorteo"; el contenido no debe revelar asignaciones.
-- **Compartir por WhatsApp** y otras apps con la **Web Share API** (`navigator.share`) y, como alternativa cuando no esté disponible, un enlace `https://wa.me/?text=...`.
-- Los emails y las notificaciones no deben incluir las asignaciones de otras personas.
+- Emails: código de acceso, invitación personal, resultado del sorteo, sorteo anulado y fallo de sorteo programado. HTML simple y accesible + versión texto; todo el contenido se escapa.
+- Push opcional (botón en «Mi cuenta», pide permiso solo tras pulsarlo; en iOS explica que hace falta instalar la app). Se eliminan suscripciones caducadas (404/410).
+- Compartir: Web Share API (`navigator.share`) con alternativa `https://wa.me/?text=…`, y botón Copiar.
 
-## Requisitos no funcionales
+## Diseño (UI)
 
-- **Privacidad (RGPD):** guardar solo los datos necesarios (nombre y email). Política de privacidad, posibilidad de borrar la cuenta y los datos de un grupo, y servicios y base de datos en región UE.
-- **Seguridad:**
-  - Tokens de invitación y de acceso largos, aleatorios y no adivinables; guardar solo su hash.
-  - Límite de peticiones (rate limiting) en envío de códigos, intentos de acceso y creación de invitaciones.
-  - Comprobar siempre la autorización en servidor: un usuario solo accede a sus grupos y a su propio resultado.
-  - Cabeceras de seguridad (CSP, HSTS, etc.).
-  - El endpoint del cron debe exigir un secreto.
-- **Fiabilidad:** reintentos en el envío de emails y registro de fallos.
-- **Usabilidad:** mobile-first; el flujo de unirse por invitación debe ser de pocos pasos y sin obligar a instalar nada.
+Inspirado en apps móviles de amigo invisible: azul, tarjetas blancas muy redondeadas y paneles inferiores. **Sin** elementos premium ni candados.
 
-## Modelo de datos orientativo
+- **Tokens** (`app/globals.css`, con variante oscura): `--hero #6c8ef5` (fondo azul), `--brand #4f74ee` (azul de enlaces e iconos), `--brand-soft #e8edfd`, `--primary #6e4bf5` (morado, CTA principal), `--warn`/`--warn-soft` (amarillo), `--danger`/`--danger-soft` (rojo), `--accent` (verde éxito), `--background #f3f5fc`, `--surface #fff`, `--muted #8a94a6`.
+- **Utilidades** (`@utility`): `btn`, `btn-primary` (morado con sombra), `btn-blue`, `btn-secondary` (azul suave), `btn-outline`, `btn-warn`, `btn-danger`, `btn-icon` (cuadrado translúcido en la cabecera azul), `btn-link`, `card` (radio 28px, sombra azulada), `label`, `input` (radio 2xl, borde 2px), `hint`, `badge`. Como algunas variantes se componen dinámicamente (`btn-${variant}`), están declaradas con `@source inline(...)`.
+- **`PageShell`** (todas las páginas): cabecera azul con logo-regalo o botón atrás, regalo centrado y engranaje (→ «Mi cuenta») o acción propia; título en «pastilla». `tone="full"` (inicio: toda la página azul con un regalo grande decorativo) o `tone="hero"` con contenido `overlap` que se superpone a la banda azul.
+- **Inicio**: «Tus amigos invisibles», tarjetas con nombre, nº de participantes aceptados, fecha corta («24 dic 2026») e icono de estado (reloj / check). Panel inferior fijo con «Unirse a un grupo» y «+ Nuevo grupo».
+- **Grupo**: tarjeta superpuesta con el estado («Faltan participantes», «Listo para el sorteo», «Sorteo programado» o botón «Ver a quién le regalo»), «Mi lista de deseos (n)» y presupuesto/entrega/organizador. Debajo: «Participantes (n)» con botón «Añadir», filas con icono de usuario, menú «⋯» (bottom sheet con reenviar/quitar) y exclusiones; botón «Añadir participante»; aviso de revisar antes del sorteo; tarjeta «Invitar»; tarjeta «Sorteo». El engranaje del admin abre «Opciones del grupo» (Editar, Compartir, Mi cuenta, Borrar).
+- **`BottomSheet`**: `<dialog>` nativo con `showModal()` (foco y Esc), anclado abajo, se cierra al pulsar el fondo y **automáticamente cuando una acción de dentro tiene éxito** (`ActionForm` emite el evento `action-success`); si hay error queda abierto.
+- **`ConfirmSubmit`**: confirmación en dos pasos en línea (no `window.confirm`), envía `confirm=yes` (comprobado en servidor) y se repliega cuando el servidor responde.
+- **`SubmitButton`**: se desactiva sin conexión en operaciones críticas y muestra el motivo.
+- Iconos de la PWA: regalo blanco con lazo amarillo sobre azul (`npm run icons`); `theme_color` y `background_color` `#6c8ef5`.
 
-- `users`: id, nombre, email (único, nulo para invitados no vinculados), creado
-- `sessions`: id, user_id, token_hash, caducidad, revocada, dispositivo
-- `login_codes`: id, email, code_hash, caducidad, intentos, usado
-- `groups`: id, admin_id, nombre, presupuesto, fecha_entrega, estado (borrador / sorteado), sorteo_programado_at, modo_sorpresa
-- `participants`: id, group_id, user_id, nombre, email, estado de invitación (pendiente / aceptada)
-- `invitations`: id, group_id, token_hash, caducidad, revocada
-- `exclusions`: id, group_id, participant_a, participant_b
-- `assignments`: id, group_id, giver_id, receiver_id (única por group_id + giver_id)
-- `wishlist_items`: id, participant_id, texto, url
-- `push_subscriptions`: id, user_id, endpoint, claves, creada
+## PWA
 
-> Es una propuesta de partida; ajustar si la implementación lo requiere.
+- `app/manifest.ts`: nombre «Amigo Invisible», `lang: es`, `display: standalone`, `start_url: /?source=pwa`, iconos 192/512, **maskable 512** y SVG.
+- Service worker (`worker/sw.ts`, Serwist):
+  - **NetworkOnly**: `/api/*`, `/groups/*/match`, `/groups/*/results`, `/invite/*`, `/login*`, `/auth/*`, `/account*`, peticiones no GET y Server Actions.
+  - **CacheFirst** (`ai-static`): `/_next/static`, `/icons`, estilos, scripts, fuentes e imágenes.
+  - **NetworkFirst** (`ai-private-pages`, timeout 5 s): navegaciones y peticiones RSC del resto de páginas (lectura sin conexión).
+  - Fallback de documentos: `/offline.html`.
+  - Precache: solo estáticos y `offline.html` (`precachePrerendered: false`). **Ojo**: el transform de Serwist convierte `public/*.html` en `/public/<nombre>` (404 → falla la instalación), por eso `offline.html` se excluye del glob y se añade a mano con revisión = hash de su contenido.
+  - Push y `notificationclick` (solo abre rutas internas).
+- Actualizaciones: `skipWaiting: false`; aparece un aviso «Hay una versión nueva — Actualizar» y solo se recarga **si el usuario lo pulsa** (en la primera instalación `clientsClaim` también cambia el controlador y no debe recargar).
+- Aviso de instalación (`InstallSuggestion`) solo tras una acción con valor (`?welcome=1` al crear o unirse), colocado **debajo** de las acciones principales para no desplazarlas al hidratar. En iOS muestra «Compartir → Añadir a pantalla de inicio». Descartable (localStorage).
+- Banner fijo «Sin conexión». El service worker **no se registra en desarrollo**.
+- iOS: push solo con la app instalada (16.4+); Safari y la app instalada no comparten cookies → por eso el código de 6 dígitos se escribe dentro de la app.
 
-## Estructura de proyecto prevista
+## Seguridad y privacidad
 
-```
-/app            rutas y páginas (App Router) y endpoints de API
-/components     componentes de interfaz
-/lib            lógica de dominio (sorteo, sesión, emails, push)
-/db             esquema Drizzle y migraciones
-/public         manifest, iconos
-/tests          pruebas unitarias y e2e
-```
+- **CSP con nonce por petición** en `proxy.ts` (`script-src 'self' 'nonce-…' 'strict-dynamic'`, `frame-ancestors 'none'`, `form-action 'self'`, `upgrade-insecure-requests` en prod). Requiere render dinámico: `app/layout.tsx` hace `await connection()`.
+- Cabeceras en `next.config.ts`: HSTS, `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`; `/sw.js` sin caché; `no-store` en `match`/`results`. Páginas con token (`/invite`, `/auth/verify`) con `referrer: no-referrer`.
+- Tokens y códigos: solo su HMAC con `SESSION_SECRET`. Comparaciones en tiempo constante.
+- **Rate limiting en PostgreSQL** (tabla `rate_limits`, ventana fija, compartida entre instancias): 5 códigos/h por email, 20/h por IP, 30 verificaciones/15 min por IP, 30 invitaciones/h por usuario, 30 uniones/h por IP.
+- **Autorización siempre en servidor** mediante la Data Access Layer (`lib/dal.ts`: `requireGroupMember`, `requireGroupAdmin`, que devuelven 404 a quien no tiene acceso) y reglas puras testeadas (`lib/permissions.ts`).
+- Redirecciones tras login solo a rutas relativas internas (`safeNextPath`).
+- **RLS activado en todas las tablas** (migración `0001_enable_rls.sql`) para que la API REST pública de Supabase no exponga datos; la app conecta como propietario y no le afecta.
+- RGPD: solo nombre y email; política de privacidad; borrar cuenta (borra sus grupos, sus participaciones —anulando sorteos afectados— y sus códigos); borrar grupo. Logs con emails enmascarados.
+- Fiabilidad de emails: 3 intentos con backoff exponencial y registro de fallos; clave de idempotencia en Resend.
 
-## Comandos (convención al crear el proyecto)
+## Modelo de datos (Drizzle, `db/schema.ts`)
 
-Mantener estos scripts en `package.json` y actualizarlos aquí cuando existan:
+IDs `uuid` aleatorios; `created_at` en todas.
 
-- `npm run dev` — desarrollo local
-- `npm run build` / `npm start` — compilar y arrancar en producción
-- `npm run lint` y `npm run typecheck`
-- `npm test` — pruebas unitarias (Vitest)
-- `npm run test:integration` — pruebas de integración contra la base de datos (idempotencia del sorteo)
-- `npm run test:e2e` — pruebas end-to-end (Playwright)
-- `npm run db:generate` / `npm run db:migrate` — migraciones
-- `npm run icons` — regenera los iconos PNG de la PWA
-- `docker compose up -d` — PostgreSQL local para desarrollo
+- `users`: name, email (único, **null para invitados**).
+- `sessions`: user_id, token_hash (único), expires_at, last_used_at, revoked_at, device.
+- `login_codes`: email, name, code_hash, link_token_hash (único), link_user_id (vincular invitado), expires_at, attempts, used_at.
+- `groups`: admin_id, name, budget (int €), delivery_date (date), status (`draft`|`drawn`), scheduled_draw_at, timezone, surprise_mode, surprise_revealed_at, drawn_at, last_draw_error. Índice parcial sobre `scheduled_draw_at` donde `status='draft'`.
+- `participants`: group_id, user_id (null si pendiente sin cuenta), name, email, status (`pending`|`accepted`); único (group_id, user_id).
+- `invitations`: group_id, participant_id (null = enlace de grupo; si no, personal), token_hash (único), expires_at, revoked_at.
+- `exclusions`: group_id, participant_a, participant_b; único y CHECK `a < b`.
+- `assignments`: group_id, giver_id, receiver_id; únicos (group, giver) y (group, receiver); CHECK giver ≠ receiver.
+- `wishlist_items`: participant_id, text, url.
+- `push_subscriptions`: user_id, endpoint (único), p256dh, auth.
+- `rate_limits`: key (PK), count, reset_at.
 
-## Variables de entorno (mantener un `.env.example` sin valores reales)
+Borrados en cascada desde `users`, `groups` y `participants`. Migraciones: `0000_init.sql`, `0001_enable_rls.sql`.
 
-- `DATABASE_URL`
-- `SESSION_SECRET`
-- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD` (envío por SMTP, p. ej. Gmail)
-- `RESEND_API_KEY` y `EMAIL_FROM`
-- `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` y `VAPID_SUBJECT`
+## Despliegue
+
+- **Vercel** (plan gratuito): importado desde GitHub, `vercel.json` con `regions: ["fra1"]` y cron diario `0 7 * * *`. Build: `npm run build` (= `next build && serwist build serwist.config.mjs`). Las variables de entorno solo se aplican tras **Redeploy**.
+- **Supabase** (`eu-west-1`): en Vercel `DATABASE_URL` = **Transaction pooler** (puerto 6543) con **`?max=1`** (tamaño del pool leído de la URL; `prepare: false` obligatorio con el pooler). La conexión directa `db.<ref>.supabase.co` es solo IPv6. Migraciones desde local con `node --env-file=.env.production.local node_modules/drizzle-kit/bin.cjs migrate`. Contraseñas con caracteres especiales deben ir codificadas en la URL.
+- **Email en producción: Gmail SMTP** (`smtp.gmail.com:465`, contraseña de aplicación, ~500 destinatarios/día, `EMAIL_FROM` = la dirección de Gmail). Resend sin dominio verificado solo entrega al dueño de la cuenta; si se compra un dominio, volver a Resend.
+- El cliente de BD y las variables de entorno se cargan **de forma perezosa** para que `next build` no necesite secretos.
+
+## Variables de entorno (`.env.example` sin valores reales)
+
+- `DATABASE_URL` (admite `?max=N`)
+- `SESSION_SECRET` (≥32 caracteres; firma tokens, códigos y deriva enlaces de invitación — cambiarlo invalida sesiones e invitaciones)
+- `SMTP_HOST`, `SMTP_PORT` (465 por defecto), `SMTP_USER`, `SMTP_PASSWORD` — tienen prioridad sobre Resend
+- `RESEND_API_KEY`
+- `EMAIL_FROM`
+- `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (`npx web-push generate-vapid-keys`)
 - `CRON_SECRET`
-- `APP_URL` (para construir los enlaces de invitación y de acceso)
+- `APP_URL` (sin barra final; base de los enlaces de invitación y acceso)
+- Solo desarrollo/tests: `DEV_OUTBOX_FILE` (el mailer de desarrollo escribe ahí los emails para que los e2e lean los códigos).
+
+Archivos locales ignorados por git: `.env.local` (desarrollo), `.env.production.local` (migrar Supabase), `.env.vercel.local` (valores para pegar en Vercel). Sin transporte de email configurado, en desarrollo los emails se imprimen en consola.
+
+## Comandos
+
+- `npm run dev` — desarrollo (Turbopack)
+- `npm run build` / `npm start` — producción (incluye `serwist build`)
+- `npm run lint` y `npm run typecheck` (`next typegen` + tsc de la app y del worker)
+- `npm test` — unitarias (algoritmo y permisos)
+- `npm run test:integration` — contra `DATABASE_URL`: concurrencia e idempotencia del sorteo y del cron, sorteos no vencidos/imposibles/insuficientes
+- `npm run test:e2e` — Playwright en Pixel 7 e iPhone 15 contra el dev server (limpia `rate_limits` antes de cada ejecución local)
+- `npm run db:generate` / `npm run db:migrate` — migraciones
+- `npm run icons` — regenera los PNG
+- `docker compose up -d` — PostgreSQL 17 local (`amigo/amigo@localhost:5432/amigo_invisible`)
+
+## Decisiones tomadas (y por qué)
+
+- **Cache Components desactivado**: casi todo depende de la sesión y los resultados nunca deben cachearse en servidor; además la CSP con nonce exige render dinámico.
+- **Organizador con email obligatorio; participantes pueden ser invitados**. Se valoró que nadie necesitara registro (identidad solo en el dispositivo + enlace de recuperación) y **se descartó por ahora**.
+- **Cron diario + ejecución al visitar** por el límite del plan gratuito de Vercel. Con plan Pro, subir la frecuencia (p. ej. `*/10 * * * *`).
+- **Gmail SMTP** en lugar de Resend por no tener dominio propio.
+- Si un participante abandona tras el sorteo: el admin lo quita y el sorteo se anula y se avisa a todos (se repite con «Repetir sorteo»).
+- `vercel.json`/región y Supabase en la UE por RGPD.
+
+## Trampas conocidas (no repetirlas)
+
+- Tailwind 4 solo genera clases que encuentra escritas completas: declarar las compuestas dinámicamente con `@source inline`.
+- `next/font` + fuente variable: no pasar lista de pesos.
+- Regla de lint `react-hooks/purity`: no usar `Date.now()` en el cuerpo de componentes; moverlo a funciones de `lib`.
+- `useActionState`: el éxito es «respuesta sin `error`», aunque no traiga mensaje.
+- En e2e, tras `reload()` esperar a la hidratación antes de pulsar botones de cliente (reintentar con `toPass`), esperar la navegación tras unirse (`waitForURL`) y usar `exact: true` en encabezados que se repiten. Los e2e de WebKit en Windows renderizan la fuente variable más fina y no reportan bien `SameSite`: no es un fallo de la app.
+- Git Bash colapsa barras invertidas en heredocs: escribir scripts con regex usando el editor.
+- `TaskStop` no mata el proceso `node` de `next start`; liberar el puerto a mano.
 
 ## Convenciones de trabajo para Claude
 
 - Antes de implementar una funcionalidad grande, **proponer un plan breve** y esperar confirmación.
-- Cambios pequeños y revisables; un tema por commit.
-- Escribir **tests** para el algoritmo de sorteo (exclusiones, casos imposibles, nadie se toca a sí mismo, idempotencia) y para los permisos de acceso a resultados.
-- No guardar secretos ni claves en el repositorio.
-- No añadir dependencias nuevas sin justificarlas.
-- Si un requisito es ambiguo, **preguntar** en lugar de asumir.
-- Probar siempre los flujos de acceso e invitación en un navegador móvil real o emulado, incluyendo el caso de iOS con la PWA instalada.
+- Cambios pequeños y revisables; **un tema por commit** (mensajes en inglés).
+- Mantener y ampliar los **tests**: algoritmo (exclusiones, imposibles, nadie consigo mismo), permisos de resultados, idempotencia (integración) y flujos e2e en móvil emulado (Android e iOS).
+- No guardar secretos en el repositorio ni pedirlos en el chat; usar archivos `.env*.local` o el panel de Vercel.
+- No añadir dependencias sin justificarlas.
+- Si un requisito es ambiguo, **preguntar**.
+- Antes de dar algo por terminado: `npm run lint`, `npm run typecheck`, `npm test`, `npm run test:integration` y `npm run test:e2e`.
+- Actualizar este archivo cuando cambie algo de lo descrito.
 
 ## Decisiones abiertas
 
-- Dominio y nombre definitivo de la app.
-- Si se mantiene Vercel como hosting o se prefiere otro proveedor en la UE.
-- Qué hacer si un participante rechaza o abandona el grupo después del sorteo (por defecto: el administrador lo quita y debe repetir el sorteo, avisando a todos).
+- Dominio propio (permitiría volver a Resend y mejorar la entregabilidad).
+- Plan de Vercel (frecuencia del cron).
+- Organizador sin registro con enlace de recuperación (propuesto y aparcado).
+- Aplicar un máximo de participantes por grupo (`MAX_PARTICIPANTS`).
 
 ## Fuera de alcance (por ahora)
 
-- App nativa en tiendas (App Store / Google Play).
+- App nativa en tiendas.
 - Pagos o compra de regalos dentro de la app.
 - Chat entre participantes.
 - Inicio de sesión con redes sociales.
+- Funciones «premium».
