@@ -144,6 +144,11 @@ export const es = {
     tipBeforeDraw:
       "Asegúrate de añadir a todos los participantes antes de realizar el sorteo, así como de comprobar los correos y las exclusiones en caso de haberlas.",
     tipWhenReady: "Cuando lo tengas todo listo, pulsa en «Hacer el sorteo ahora».",
+    leave: "Salir del grupo",
+    leaveConfirm: "Dejarás de participar en este grupo y se borrará tu lista de deseos.",
+    leaveAfterDrawConfirm:
+      "El sorteo ya se ha hecho. Si sales, se anulará, habrá que repetirlo y avisaremos a todos. Tu lista de deseos se borrará.",
+    adminCannotLeave: "Como organizador no puedes salir del grupo: puedes borrarlo o quitarte como participante.",
     deleteGroupConfirm: "Se borrarán el grupo, sus participantes, listas de deseos y resultados. No se puede deshacer.",
     myWishlist: "Mi lista de deseos",
     myMatch: "Ver a quién le regalo",
@@ -174,6 +179,9 @@ export const es = {
     expired: "Esta invitación ha caducado o el sorteo ya se ha hecho. Pide un enlace nuevo a quien organiza.",
     joined: "¡Ya formas parte del grupo!",
     offline: "Necesitas conexión para aceptar la invitación.",
+    duplicateName:
+      "Ya hay alguien llamado «{name}» en este grupo. Si eres tú, entra desde el móvil o navegador con el que te uniste para no aparecer dos veces. Si eres otra persona, puedes unirte igualmente.",
+    joinAnyway: "Soy otra persona, unirme",
   },
   participants: {
     title: "Participantes",

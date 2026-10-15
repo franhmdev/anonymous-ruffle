@@ -106,6 +106,39 @@ export async function resolveInvitation(token: string): Promise<ResolvedInvitati
 }
 
 /**
+ * Group an invitation belongs to, even if the invitation has expired or was
+ * revoked by the draw. Used to send existing members straight to their group.
+ */
+export async function findInvitationGroupId(token: string): Promise<string | null> {
+  if (!/^[\w-]{20,100}$/.test(token)) return null;
+  const row = await db.query.invitations.findFirst({
+    where: eq(invitations.tokenHash, hashSecret(token, PURPOSE)),
+    columns: { groupId: true },
+  });
+  return row?.groupId ?? null;
+}
+
+const normalizeName = (name: string) =>
+  name
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .trim()
+    .toLowerCase();
+
+/** Same person name, ignoring case and accents. */
+export const sameName = (a: string, b: string) => normalizeName(a) === normalizeName(b);
+
+/** True if an accepted participant of the group already uses this name (ignoring case and accents). */
+export async function groupHasMemberNamed(groupId: string, name: string): Promise<boolean> {
+  const members = await db.query.participants.findMany({
+    where: and(eq(participants.groupId, groupId), eq(participants.status, "accepted")),
+    columns: { name: true },
+  });
+  const wanted = normalizeName(name);
+  return members.some((member) => normalizeName(member.name) === wanted);
+}
+
+/**
  * Adds the user to the group as an accepted participant. Reuses the pending
  * record created by the admin when the invitation is personal or the email matches.
  */

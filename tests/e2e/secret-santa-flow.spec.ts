@@ -6,7 +6,12 @@ import { confirmAction, findEmail, loginWithCode, uniqueEmail } from "./helpers"
 // and each person sees only their own match.
 test.describe.configure({ mode: "serial" });
 
-async function joinAsGuest(browser: Browser, inviteLink: string, name: string): Promise<Page> {
+async function joinAsGuest(
+  browser: Browser,
+  inviteLink: string,
+  name: string,
+  groupName = "Familia E2E",
+): Promise<Page> {
   const context = await browser.newContext({ ...test.info().project.use, locale: "es-ES" });
   const page = await context.newPage();
   await page.goto(inviteLink);
@@ -14,7 +19,7 @@ async function joinAsGuest(browser: Browser, inviteLink: string, name: string): 
   await page.getByLabel("Tu nombre").fill(name);
   await page.getByRole("button", { name: "Unirme" }).click();
   await page.waitForURL(/\/groups\/[0-9a-f-]{36}/);
-  await expect(page.getByRole("heading", { name: "Familia E2E", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: groupName, exact: true })).toBeVisible();
   return page;
 }
 
@@ -84,9 +89,53 @@ test("create, invite, join as guests, draw and see only your own result", async 
     expect(response?.headers()["cache-control"]).toContain("no-store");
   }
 
-  // The invitation closes once the draw is done.
+  // Members who reopen the link after the draw go straight to their group…
   await bea.goto(inviteLink);
-  await expect(bea.getByText(/ha caducado o el sorteo ya se ha hecho/)).toBeVisible();
+  await bea.waitForURL(/\/groups\/[0-9a-f-]{36}$/);
+  await expect(bea.getByRole("link", { name: /Ver a quién le regalo/ })).toBeVisible();
+
+  // …while for anyone else the invitation is closed.
+  const stranger = await (await browser.newContext({ ...test.info().project.use, locale: "es-ES" })).newPage();
+  await stranger.goto(inviteLink);
+  await expect(stranger.getByText(/ha caducado o el sorteo ya se ha hecho/)).toBeVisible();
+});
+
+test("reopening the link, duplicate names and leaving a group", async ({ page, browser }) => {
+  test.setTimeout(120_000);
+  await loginWithCode(page, uniqueEmail("org"), "Olga");
+  await page.getByRole("link", { name: "Nuevo grupo" }).click();
+  await page.getByLabel("Nombre del grupo").fill("Amigos E2E");
+  await page.getByRole("button", { name: "Crear grupo" }).click();
+  await page.waitForURL(/\/groups\/[0-9a-f-]{36}/);
+  const inviteLink = (await page.getByLabel("Enlace").textContent())!.trim();
+
+  // A member reopening the link goes straight to the group (no second "Unirme").
+  const lucia = await joinAsGuest(browser, inviteLink, "Lucía", "Amigos E2E");
+  await lucia.goto(inviteLink);
+  await lucia.waitForURL(/\/groups\/[0-9a-f-]{36}$/);
+  await expect(lucia.getByRole("heading", { name: "Amigos E2E", exact: true })).toBeVisible();
+
+  // Someone else typing the same name (ignoring case and accents) is warned first.
+  const other = await (await browser.newContext({ ...test.info().project.use, locale: "es-ES" })).newPage();
+  await other.goto(inviteLink);
+  await other.getByLabel("Tu nombre").fill("lucia");
+  await other.getByRole("button", { name: "Unirme" }).click();
+  await expect(other.getByRole("alert").filter({ hasText: "Ya hay alguien llamado «lucia»" })).toBeVisible();
+  await other.getByRole("button", { name: "Soy otra persona, unirme" }).click();
+  await other.waitForURL(/\/groups\/[0-9a-f-]{36}/);
+  await expect(other.getByRole("heading", { name: "Participantes (3)" })).toBeVisible();
+
+  // A participant can leave the group from "Opciones del grupo".
+  await expect(async () => {
+    await other.getByRole("button", { name: "Opciones del grupo" }).click();
+    await expect(other.getByRole("dialog", { name: "Opciones del grupo" })).toBeVisible({ timeout: 1_000 });
+  }).toPass();
+  await confirmAction(other, "Salir del grupo");
+  await other.waitForURL((url) => url.pathname === "/");
+  await expect(other.getByRole("link", { name: /Amigos E2E/ })).toHaveCount(0);
+
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Participantes (2)" })).toBeVisible();
 });
 
 test("wishlist rejects non-http links and opens store links safely", async ({ page }) => {

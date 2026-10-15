@@ -16,6 +16,7 @@ import { getActiveGroupInvitation } from "@/lib/invitations";
 import { AdminPanel } from "./_sections/admin-panel";
 import { GroupOptions } from "./_sections/group-options";
 import { MemberList } from "./_sections/member-list";
+import { MemberOptions } from "./_sections/member-options";
 
 export const metadata: Metadata = { title: "Grupo" };
 
@@ -92,7 +93,13 @@ export default async function GroupPage({ params, searchParams }: PageProps<"/gr
       back="/"
       title={group.name}
       settings
-      action={isAdmin ? <GroupOptions group={group} inviteLink={invitation?.link ?? null} /> : undefined}
+      action={
+        isAdmin ? (
+          <GroupOptions group={group} inviteLink={invitation?.link ?? null} />
+        ) : participates ? (
+          <MemberOptions group={group} />
+        ) : undefined
+      }
       overlap={statusCard}
     >
       {isAdmin && group.lastDrawError && !isDrawn && (

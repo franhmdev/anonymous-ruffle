@@ -1,20 +1,32 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { ActionForm } from "@/components/action-form";
 import { GiftIcon } from "@/components/icons";
 import { PageShell } from "@/components/page-shell";
 import { SubmitButton } from "@/components/submit-button";
 import { getCurrentUser } from "@/lib/auth/session";
 import { format, formatBudget, formatDate, t } from "@/lib/i18n";
-import { resolveInvitation } from "@/lib/invitations";
+import { isGroupMember } from "@/lib/dal";
+import { findInvitationGroupId, resolveInvitation } from "@/lib/invitations";
 import { acceptInvitationAction, joinAsGuestAction } from "./actions";
+import { GuestJoinForm } from "./guest-join-form";
 
 // The token must not leak through the Referer header.
 export const metadata: Metadata = { title: "Invitación", referrer: "no-referrer", robots: { index: false } };
 
 export default async function InvitePage({ params }: PageProps<"/invite/[token]">) {
   const { token } = await params;
-  const [invitation, user] = await Promise.all([resolveInvitation(token), getCurrentUser()]);
+  const [invitation, user, invitationGroupId] = await Promise.all([
+    resolveInvitation(token),
+    getCurrentUser(),
+    findInvitationGroupId(token),
+  ]);
+
+  // Members who open the link again (even after the draw closed it) go straight to their group.
+  if (user && invitationGroupId && (await isGroupMember(invitationGroupId, user.id))) {
+    redirect(`/groups/${invitationGroupId}`);
+  }
 
   if (!invitation.ok) {
     return (
@@ -61,26 +73,7 @@ export default async function InvitePage({ params }: PageProps<"/invite/[token]"
         </ActionForm>
       ) : (
         <>
-          <ActionForm action={joinAsGuestAction.bind(null, token)} className="card space-y-4">
-            <div>
-              <label htmlFor="guest-name" className="label">
-                {t.invite.guestName}
-              </label>
-              <input
-                id="guest-name"
-                name="name"
-                required
-                maxLength={60}
-                autoComplete="given-name"
-                defaultValue={invitation.invitedName ?? ""}
-                className="input"
-              />
-              <p className="hint">{t.invite.guestHint}</p>
-            </div>
-            <SubmitButton className="w-full text-xl" offlineMessage={t.invite.offline}>
-              {t.invite.joinAsGuest}
-            </SubmitButton>
-          </ActionForm>
+          <GuestJoinForm action={joinAsGuestAction.bind(null, token)} defaultName={invitation.invitedName ?? ""} />
           <p className="text-center">
             <Link href={`/login?next=${encodeURIComponent(`/invite/${token}`)}`} className="btn-link">
               {t.invite.haveAccount}

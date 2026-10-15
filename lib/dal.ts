@@ -28,6 +28,12 @@ const loadGroupContext = cache(async (groupId: string, userId: string) => {
   return { group, me };
 });
 
+/** Whether the user can already see the group (admin or accepted participant). */
+export async function isGroupMember(groupId: string, userId: string): Promise<boolean> {
+  const ctx = await loadGroupContext(groupId, userId);
+  return Boolean(ctx && canViewGroup(ctx.group, userId, ctx.me));
+}
+
 /** Admin or accepted participant. Anyone else gets a 404 (no information leak). */
 export async function requireGroupMember(groupId: string): Promise<GroupContext> {
   const user = await requireUser(`/groups/${groupId}`);

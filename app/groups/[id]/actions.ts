@@ -252,6 +252,28 @@ export async function deleteGroupAction(groupId: string, _state: FormState, form
   redirect("/");
 }
 
+/**
+ * A participant (not the admin) leaves the group. Leaving after the draw
+ * invalidates it, like any other change of participants, and everyone is told.
+ */
+export async function leaveGroupAction(groupId: string, _state: FormState, formData: FormData): Promise<FormState> {
+  const ctx = await requireGroupMember(groupId);
+  if (ctx.isAdmin) return fail(t.groups.adminCannotLeave);
+  if (!ctx.me) return fail(t.errors.generic);
+  if (!confirmed(formData)) return fail(t.errors.confirmRequired);
+
+  const participantId = ctx.me.id;
+  const invalidated = await db.transaction(async (tx) => {
+    const wasInvalidated = await invalidateDrawInTx(tx, groupId);
+    await tx.delete(participants).where(and(eq(participants.id, participantId), eq(participants.groupId, groupId)));
+    return wasInvalidated;
+  });
+
+  if (invalidated) after(() => notifyDrawInvalidated(groupId));
+  revalidatePath("/");
+  redirect("/");
+}
+
 export async function addWishAction(groupId: string, _state: FormState, formData: FormData): Promise<FormState> {
   const ctx = await requireGroupMember(groupId);
   if (!ctx.me || ctx.me.status !== "accepted") return fail(t.errors.generic);

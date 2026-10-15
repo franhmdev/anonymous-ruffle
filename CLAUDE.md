@@ -47,10 +47,10 @@ app/
   auth/verify/page.tsx       enlace mágico (requiere pulsar "Entrar": POST)
   account/ (page, actions)   nombre, vincular email, push, cerrar sesión (este / todos), borrar cuenta, enlace a privacidad
   join/ (page, actions)      pegar un enlace de invitación → /invite/[token]
-  invite/[token]/            ver invitación y unirse (invitado o con cuenta)
+  invite/[token]/            ver invitación y unirse (invitado o con cuenta); guest-join-form.tsx
   groups/new/                crear grupo
   groups/[id]/page.tsx       detalle del grupo (+ ejecuta un sorteo programado vencido)
-  groups/[id]/_sections/     admin-panel, member-list, group-options (bottom sheet)
+  groups/[id]/_sections/     admin-panel, member-list, group-options (admin) y member-options (participante), ambos bottom sheets
   groups/[id]/edit/          editar nombre, presupuesto y fecha
   groups/[id]/match/         a quién regalo + su lista de deseos (NUNCA cacheado)
   groups/[id]/results/       todas las asignaciones (solo admin; NUNCA cacheado)
@@ -93,6 +93,9 @@ tests/unit, tests/integration, tests/e2e
 - Las invitaciones **caducan a los 30 días o al hacerse el sorteo** (se revocan todas al sortear) y no valen si el grupo no está en `draft`.
 - **Solo cuentan los participantes aceptados.** Al aceptar: si el usuario ya estaba, se marca aceptado; si la invitación es personal (o hay un pendiente con su email), se reclama ese registro; si no, se crea uno nuevo. Se bloquea la fila del grupo (`FOR UPDATE`) para no aceptar durante un sorteo.
 - `/join`: pegar un enlace (o solo el token) lleva a `/invite/[token]`. La página de invitación funciona completa en el navegador, sin instalar nada.
+- **Volver a abrir el enlace**: si quien lo abre ya es miembro del grupo (admin o aceptado), se le redirige directamente a su grupo, aunque la invitación haya caducado o el sorteo la haya cerrado. Para cualquier otra persona, una invitación cerrada muestra «ha caducado o el sorteo ya se ha hecho».
+- **Nombres repetidos**: al unirse como invitado con un enlace de grupo, si ya hay un participante aceptado con el mismo nombre (sin distinguir mayúsculas ni tildes), se avisa («Si eres tú, entra desde el móvil con el que te uniste…») y el botón pasa a «Soy otra persona, unirme». Ese botón envía el nombre confirmado (`confirmDuplicate`) y el servidor solo omite la comprobación para ese mismo nombre. Las invitaciones personales no se comprueban (reclaman su propio registro pendiente).
+- **Salir del grupo**: un participante que no es el admin puede salir desde «Opciones del grupo» (engranaje), con confirmación. Se borra su participación (y su lista de deseos); si el grupo estaba sorteado, el sorteo se anula y se avisa a todos. El admin no puede salir: puede borrar el grupo o quitarse como participante. Borrar el grupo entero es solo del admin.
 - Quitar participante: con confirmación. **Cualquier cambio de participantes con el grupo sorteado anula el sorteo** (se pide `confirm=yes` en servidor y se avisa a todos por email y push).
 
 ### 4. Exclusiones
@@ -138,9 +141,10 @@ Inspirado en apps móviles de amigo invisible: azul, tarjetas blancas muy redond
 - **Utilidades** (`@utility`): `btn`, `btn-primary` (morado con sombra), `btn-blue`, `btn-secondary` (azul suave), `btn-outline`, `btn-warn`, `btn-danger`, `btn-icon` (cuadrado translúcido en la cabecera azul), `btn-link`, `card` (radio 28px, sombra azulada), `label`, `input` (radio 2xl, borde 2px), `hint`, `badge`. Como algunas variantes se componen dinámicamente (`btn-${variant}`), están declaradas con `@source inline(...)`.
 - **`PageShell`** (todas las páginas): cabecera azul con logo-regalo o botón atrás, regalo centrado y engranaje (→ «Mi cuenta») o acción propia; título en «pastilla». `tone="full"` (inicio: toda la página azul con un regalo grande decorativo) o `tone="hero"` con contenido `overlap` que se superpone a la banda azul.
 - **Inicio**: «Tus amigos invisibles», tarjetas con nombre, nº de participantes aceptados, fecha corta («24 dic 2026») e icono de estado (reloj / check). Panel inferior fijo con «Unirse a un grupo» y «+ Nuevo grupo».
-- **Grupo**: tarjeta superpuesta con el estado («Faltan participantes», «Listo para el sorteo», «Sorteo programado» o botón «Ver a quién le regalo»), «Mi lista de deseos (n)» y presupuesto/entrega/organizador. Debajo: «Participantes (n)» con botón «Añadir», filas con icono de usuario, menú «⋯» (bottom sheet con reenviar/quitar) y exclusiones; botón «Añadir participante»; aviso de revisar antes del sorteo; tarjeta «Invitar»; tarjeta «Sorteo». El engranaje del admin abre «Opciones del grupo» (Editar, Compartir, Mi cuenta, Borrar).
+- **Grupo**: tarjeta superpuesta con el estado («Faltan participantes», «Listo para el sorteo», «Sorteo programado» o botón «Ver a quién le regalo»), «Mi lista de deseos (n)» y presupuesto/entrega/organizador. Debajo: «Participantes (n)» con botón «Añadir», filas con icono de usuario, menú «⋯» (bottom sheet con reenviar/quitar) y exclusiones; botón «Añadir participante»; aviso de revisar antes del sorteo; tarjeta «Invitar»; tarjeta «Sorteo». El engranaje del admin abre «Opciones del grupo» (Editar, Compartir, Mi cuenta, Borrar); el de un participante, «Opciones del grupo» con Mi cuenta y Salir del grupo.
 - **`BottomSheet`**: `<dialog>` nativo con `showModal()` (foco y Esc), anclado abajo, se cierra al pulsar el fondo y **automáticamente cuando una acción de dentro tiene éxito** (`ActionForm` emite el evento `action-success`); si hay error queda abierto.
 - **`ConfirmSubmit`**: confirmación en dos pasos en línea (no `window.confirm`), envía `confirm=yes` (comprobado en servidor) y se repliega cuando el servidor responde.
+- **`ActionForm`**: formulario conectado a una Server Action con `useActionState`; muestra el error o el éxito, admite `children` como función del último estado, emite `action-success` y, **si el servidor devuelve error, restaura los valores enviados** (React 19 vacía los campos tras cada acción).
 - **`SubmitButton`**: se desactiva sin conexión en operaciones críticas y muestra el motivo.
 - Iconos de la PWA: regalo blanco con lazo amarillo sobre azul (`npm run icons`); `theme_color` y `background_color` `#6c8ef5`.
 
@@ -237,6 +241,7 @@ Archivos locales ignorados por git: `.env.local` (desarrollo), `.env.production.
 - `next/font` + fuente variable: no pasar lista de pesos.
 - Regla de lint `react-hooks/purity`: no usar `Date.now()` en el cuerpo de componentes; moverlo a funciones de `lib`.
 - `useActionState`: el éxito es «respuesta sin `error`», aunque no traiga mensaje.
+- React 19 **resetea los campos del formulario tras cada acción**: no usar inputs controlados dentro de formularios con `action` (en Safari el DOM queda vacío mientras React conserva el valor y la validación `required` bloquea el envío sin avisar). Usar campos no controlados con `name` (ActionForm restaura sus valores si hay error) y, para confirmar algo, el `name`/`value` del propio botón de envío.
 - En e2e, tras `reload()` esperar a la hidratación antes de pulsar botones de cliente (reintentar con `toPass`), esperar la navegación tras unirse (`waitForURL`) y usar `exact: true` en encabezados que se repiten. Los e2e de WebKit en Windows renderizan la fuente variable más fina y no reportan bien `SameSite`: no es un fallo de la app.
 - Git Bash colapsa barras invertidas en heredocs: escribir scripts con regex usando el editor.
 - `TaskStop` no mata el proceso `node` de `next start`; liberar el puerto a mano.
